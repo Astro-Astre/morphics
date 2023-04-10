@@ -23,25 +23,6 @@ class ELBO(nn.Module):
         return calculate_multiquestion_loss(input, target, self.schema.question_index_groups) * self.train_size + beta * kl
         # return F.nll_loss(input, target, reduction='mean') * self.train_size + beta * kl
 
-# class ELBO(nn.Module):
-#     def __init__(self, train_size):
-#         super(ELBO, self).__init__()
-#         self.train_size = train_size
-#         self.question_answer_pairs = label_metadata.gz2_pairs  # 问题？
-#         self.dependencies = label_metadata.gz2_and_decals_dependencies
-#         self.schema = schemas.Schema(self.question_answer_pairs, self.dependencies)
-#
-#     def forward(self, input, target, kl, beta):
-#         assert not target.requires_grad
-#         nll = torch.mean(calculate_multiquestion_loss(input, target, self.schema.question_index_groups)) * self.train_size
-#         print(nll)
-#         return nll[0] + beta * kl
-#         # return F.nll_loss(input, target, reduction='mean') * self.train_size + beta * kl
-# def lr_linear(epoch_num, decay_start, total_epochs, start_value):
-#     if epoch_num < decay_start:
-#         return start_value
-#     return start_value*float(total_epochs-epoch_num)/float(total_epochs-decay_start)
-
 
 def acc(outputs, targets):
     return np.mean(outputs.cpu().numpy().argmax(axis=1) == targets.data.cpu().numpy())

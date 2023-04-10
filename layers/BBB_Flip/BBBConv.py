@@ -1,16 +1,9 @@
 import sys
-
 sys.path.append("..")
-
-import math
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Parameter
-
-import utils
 from metrics import calculate_kl as KL_DIV
-import config_bayesian as cfg
 from ..misc import ModuleWrapper
 
 

@@ -36,39 +36,6 @@ def calculate_multiquestion_loss(labels, predictions, question_index_groups):
     return total_loss  # leave the reduction to pytorch lightning
 
 
-# def calculate_multiquestion_loss(labels, predictions, question_index_groups):
-
-#     # very important that question_index_groups is fixed and discrete, else tf.function autograph will mess up
-#     q_losses = []
-#     # will give shape errors if model output dim is not labels dim, which can happen if losses.py substrings are missing an answer
-#     for q_n in range(len(question_index_groups)):
-#         q_indices = question_index_groups[q_n]
-#         q_start = q_indices[0]
-#         q_end = q_indices[1]
-#
-#         # Ensure predictions are positive
-#         adjusted_predictions = predictions[:, q_start:q_end + 1] + 1e-6
-#
-#         # Normalize labels
-#         normalized_labels = labels[:, q_start:q_end + 1] / torch.sum(labels[:, q_start:q_end + 1], dim=1, keepdim=True)
-#
-#         # Calculate total_count and round to nearest integer
-#         total_count = torch.round(torch.sum(labels[:, q_start:q_end + 1], dim=1))
-#
-#         # Normalize predictions
-#         normalized_predictions = adjusted_predictions / torch.sum(adjusted_predictions, dim=1, keepdim=True)
-#
-#         # Convert normalized predictions to integer predictions
-#         integer_predictions = torch.round(normalized_predictions * total_count.unsqueeze(1)) + 1
-#
-#         # Compute Dirichlet loss
-#         q_loss = dirichlet_loss(normalized_labels, integer_predictions, total_count)
-#         q_losses.append(q_loss)
-#
-#     total_loss = torch.stack(q_losses, axis=1)
-#
-#     return total_loss  # leave the reduction to pytorch lightning
-
 def dirichlet_loss(labels_for_q, concentrations_for_q):
     """
     Negative log likelihood of ``labels_for_q`` being drawn from Dirichlet-Multinomial distribution with ``concentrations_for_q`` concentrations.
