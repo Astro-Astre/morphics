@@ -1,11 +1,5 @@
-import os
-
 import metrics
 from models.BayesianModels.BayesianEffnetv2 import EffNetV2, effnetv2_m, effnetv2_l, effnetv2_xl, effnetv2_s
-from models.BayesianModels.BayesResNet import *
-# from training import losses
-# from estimators import define_model
-# from estimators import efficientnet_standard
 import random
 from torch.backends import cudnn
 from pytorch_galaxy_datasets.galaxy_dataset import *
@@ -15,7 +9,6 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
 from shared import label_metadata, schemas
 from training import losses
-import torch.nn.functional as F
 
 from tqdm import tqdm
 
@@ -33,18 +26,6 @@ def init_rand_seed(rand_seed):
     cudnn.benchmark = False
     cudnn.deterministic = True
 init_rand_seed(1926)
-
-# def select_base_architecture_func_from_name(base_architecture):
-#     if base_architecture == 'efficientnet':
-#         get_architecture = efficientnet_standard.efficientnet_b0
-#         representation_dim = 1280
-#     else:
-#         raise ValueError(
-#             'Model architecture not recognised: got model={}, expected one of [efficientnet, resnet_detectron, '
-#             'resnet_torchvision]'.format(
-#                 base_architecture))
-#
-#     return get_architecture, representation_dim
 
 
 def get_avg_loss(loss):
