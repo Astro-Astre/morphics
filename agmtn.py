@@ -7,7 +7,6 @@ import multiprocessing
 import pandas as pd
 
 random.seed(1926)
-# SAVE_PATH = "/data/renhaoye/MorCG/dataset/"  # the head of the directory to save
 import os
 import pickle
 from astropy.io import fits
@@ -194,12 +193,8 @@ if __name__ == "__main__":
     for i in range(len(loc_files)):
         loc.append([float(loc_files[i].split("_")[0]), float(loc_files[i].split("_")[1].split(".fits")[0])])
     loc = pd.DataFrame(loc, columns=["ra", "dec"])
-    # print(loc.head())
     overlap_true = match(loc, overlap, 5, ["MGS_ra", "MGS_dec"]).drop(columns=["ra", "dec"])
     overlap_true = overlap_true.rename(columns={"MGS_ra": "ra", "MGS_dec": "dec"})
-    # print(overlap_true.columns)
-    # print(overlap_true.iloc[0, :])
-    # overlap_true = match(loc, overlap, 2, ["real_ra", "real_dec"]).drop(columns=["ra", "dec"]).rename(columns={"real_ra": "ra", "real_dec": "dec"})
     src = []
     for i in range(len(overlap)):
         src.append("%s_%s.fits" % (overlap_true.loc[i, "ra"], overlap_true.loc[i, "dec"]))

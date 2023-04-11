@@ -1,24 +1,21 @@
 """
+Backbone for EfficientNetV2
 Creates a EfficientNetV2 Model as defined in:
 Mingxing Tan, Quoc V. Le. (2021). 
 EfficientNetV2: Smaller Models and Faster Training
 arXiv preprint arXiv:2104.00298.
 import from https://github.com/d-li14/mobilenetv2.pytorch
+
+Modified by: Renhao Ye
+Date: 2023.04.11
 """
 
 import torch
 import torch.nn as nn
 import math
-
-# import torchsummary
-import torch.nn.functional as F
-import numpy as np
-import math
 from torch import Tensor
-
 from layers import BBB_Flipout_Linear, BBB_Flipout_Conv2d
 from layers import FlattenLayer, ModuleWrapper
-import metrics
 
 __all__ = ['effnetv2_s', 'effnetv2_m', 'effnetv2_l', 'effnetv2_xl']
 
@@ -29,10 +26,10 @@ def _make_divisible(v, divisor, min_value=None):
     It ensures that all layers have a channel number that is divisible by 8
     It can be seen here:
     https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet.py
-    :param v:
-    :param divisor:
-    :param min_value:
-    :return:
+    :param v: input value
+    :param divisor: divisor
+    :param min_value: min value
+    :return: output value
     """
     if min_value is None:
         min_value = divisor
@@ -83,6 +80,7 @@ class SELayer(ModuleWrapper):
 
 
 def conv_3x3_bn(inp, oup, stride):
+    # 3x3 convolution with padding and batch normalization with SiLU activation
     return nn.Sequential(
         BBB_Flipout_Conv2d(inp, oup, 3, stride, 1, bias=False),
         nn.BatchNorm2d(oup),
@@ -91,6 +89,7 @@ def conv_3x3_bn(inp, oup, stride):
 
 
 def conv_1x1_bn(inp, oup):
+    # 1x1 convolution with batch normalization with SiLU activation
     return nn.Sequential(
         BBB_Flipout_Conv2d(inp, oup, 1, 1, 0, bias=False),
         nn.BatchNorm2d(oup),
@@ -99,9 +98,10 @@ def conv_1x1_bn(inp, oup):
 
 
 class MBConv(ModuleWrapper):
+    # Mobile Inverted Residual Bottleneck Block
     def __init__(self, inp, oup, stride, expand_ratio, use_se):
         super(MBConv, self).__init__()
-        assert stride in [1, 2]
+        assert stride in [1, 2]  # stride 2 only for first block
 
         hidden_dim = round(inp * expand_ratio)
         self.identity = stride == 1 and inp == oup
@@ -159,6 +159,8 @@ class ScaledSigmoid(nn.modules.Sigmoid):
             Tensor: input mapped to range (1, 101) via torch.sigmoid
         """
         return torch.sigmoid(input) * 100. + 1.  # could make args if I needed
+
+
 class EffNetV2(ModuleWrapper):
     def __init__(self, cfgs, num_classes=1000, width_mult=1., layer_type='lrt', activation_type='softplus'):
         super(EffNetV2, self).__init__()
@@ -187,8 +189,6 @@ class EffNetV2(ModuleWrapper):
         self._initialize_weights()
 
     def forward(self, x):
-        # x = self.spatial_transform(x)
-        # print(x.shape)
         _kl = 0.0
         x = self.features(x)
         x = self.conv(x)
@@ -202,8 +202,6 @@ class EffNetV2(ModuleWrapper):
         self.kl += kl
         return x, self.kl
 
-
-
     def _initialize_weights(self):
         for m in self.modules():
             if isinstance(m, BBB_Flipout_Conv2d):
@@ -216,9 +214,6 @@ class EffNetV2(ModuleWrapper):
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
-            # elif isinstance(m, BBB_Flipout_Linear):
-            # m.W_sigma.data.normal_(0, 0.001)
-            # m.bias_sigma.data.zero_()
 
 
 def effnetv2_s(**kwargs):
@@ -287,7 +282,6 @@ def effnetv2_xl(**kwargs):
     ]
     return EffNetV2(cfgs, **kwargs)
 
-
 # if __name__ == '__main__':
 #     model = effnetv2_s()
 #     model.eval()
@@ -300,18 +294,18 @@ def effnetv2_xl(**kwargs):
 #     print(y[0])
 #     print("*" * 100)
 #     print(y[1])
-    # torchsummary.summary(model, (3, 256, 256), batch_size=256, device="cuda")
-    # print(model)
-    #
-    #
-    # def count_parameters(model):
-    #     return sum(p.numel() for p in model.parameters() if p.requires_grad)
+# torchsummary.summary(model, (3, 256, 256), batch_size=256, device="cuda")
+# print(model)
+#
+#
+# def count_parameters(model):
+#     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-    # model = model()  # 替换成你的自定义卷积层网络
-    # print(f'The number of trainable parameters of the model is {count_parameters(model):,}')
-    # # 获取所有可训练参数
-    # params = list(model.parameters())
-    #
-    # # 遍历每个参数，输出参数形状和名称
-    # for i, param in enumerate(params):
-    #     print(f"Param {i}: {param.shape}, {param.name}")
+# model = model()  # 替换成你的自定义卷积层网络
+# print(f'The number of trainable parameters of the model is {count_parameters(model):,}')
+# # 获取所有可训练参数
+# params = list(model.parameters())
+#
+# # 遍历每个参数，输出参数形状和名称
+# for i, param in enumerate(params):
+#     print(f"Param {i}: {param.shape}, {param.name}")

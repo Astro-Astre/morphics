@@ -3,14 +3,11 @@ sys.path.append("")
 import torch
 import torch.nn.functional as F
 from torch.nn import Parameter
-
 from metrics import calculate_kl as KL_DIV
-import config_bayesian as cfg
 from layers.misc import ModuleWrapper
 
 
 class BBBLinear(ModuleWrapper):
-
     def __init__(self, in_features, out_features, bias=True, priors=None):
         super(BBBLinear, self).__init__()
         self.in_features = in_features
