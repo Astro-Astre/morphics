@@ -1,10 +1,10 @@
 import sys
-sys.path.append("..")
+sys.path.append("")
 import torch
 import torch.nn.functional as F
 from torch.nn import Parameter
 from metrics import calculate_kl as KL_DIV
-from ..misc import ModuleWrapper
+from layers.misc import ModuleWrapper
 
 
 class BBBConv2d(ModuleWrapper):
@@ -48,6 +48,16 @@ class BBBConv2d(ModuleWrapper):
 
         self.reset_parameters()
 
+    def extra_repr(self):
+        return 'in_channels={}, out_channels={}, kernel_size={}, stride={}, padding={}, dilation={}, groups={}, bias={}'.format(
+            self.in_channels, self.out_channels, self.kernel_size, self.stride, self.padding, self.dilation,
+            self.groups, self.use_bias)
+
+    def __str__(self):
+        return "BBBConv2d(in_channels={}, out_channels={}, kernel_size={}, stride={}, padding={}, dilation={}, groups={}, bias={})".format(
+            self.in_channels, self.out_channels, self.kernel_size, self.stride, self.padding, self.dilation,
+            self.groups, self.use_bias)
+
     def reset_parameters(self):
         self.W_mu.data.normal_(*self.posterior_mu_initial)
         self.W_rho.data.normal_(*self.posterior_rho_initial)
@@ -65,30 +75,24 @@ class BBBConv2d(ModuleWrapper):
         else:
             self.bias_sigma = bias_var = None
 
-        act_mu = F.conv2d(
-            x, self.W_mu, self.bias_mu, self.stride, self.padding, self.dilation, self.groups)
-        act_var = 1e-16 + F.conv2d(
-            x ** 2, self.W_sigma ** 2, bias_var, self.stride, self.padding, self.dilation, self.groups)
-        act_std = torch.sqrt(act_var)
-
-        if self.training or sample:
-            eps = torch.empty(act_mu.size()).normal_(0, 1).to(self.device)
-            return act_mu + act_std * eps
+        weight_epsilon = torch.randn(self.out_channels, self.in_channels, *self.kernel_size, device=x.device)
+        weight = self.W_mu + weight_epsilon * self.W_sigma
+        if self.use_bias:
+            bias_epsilon = torch.randn(self.out_channels, device=x.device)
+            bias = self.bias_mu + bias_epsilon * self.bias_sigma
         else:
-            return act_mu
+            bias = None
+
+        out = F.conv2d(x, weight, bias, self.stride, self.padding, self.dilation, self.groups)
+
+        x_flipped = torch.cat([x[:, :, 1:], x[:, :, :-1]], dim=2)
+        weight_flipped = torch.cat([weight[:, :, 1:], weight[:, :, :-1]], dim=2)
+        out_flipped = F.conv2d(x_flipped, weight_flipped, None, self.stride, self.padding, self.dilation, self.groups)
+
+        return out + out_flipped
 
     def kl_loss(self):
         kl = KL_DIV(self.prior_mu, self.prior_sigma, self.W_mu, self.W_sigma)
         if self.use_bias:
             kl += KL_DIV(self.prior_mu, self.prior_sigma, self.bias_mu, self.bias_sigma)
         return kl
-
-    def extra_repr(self):
-        return 'in_channels={}, out_channels={}, kernel_size={}, stride={}, padding={}, dilation={}, groups={}, bias={}'.format(
-            self.in_channels, self.out_channels, self.kernel_size, self.stride, self.padding, self.dilation,
-            self.groups, self.use_bias)
-
-    def __str__(self):
-        return "BBBConv2d(in_channels={}, out_channels={}, kernel_size={}, stride={}, padding={}, dilation={}, groups={}, bias={})".format(
-            self.in_channels, self.out_channels, self.kernel_size, self.stride, self.padding, self.dilation,
-            self.groups, self.use_bias)

@@ -1,10 +1,12 @@
 import sys
-sys.path.append("..")
+sys.path.append("")
 import torch
 import torch.nn.functional as F
 from torch.nn import Parameter
+
 from metrics import calculate_kl as KL_DIV
-from ..misc import ModuleWrapper
+import config_bayesian as cfg
+from layers.misc import ModuleWrapper
 
 
 class BBBLinear(ModuleWrapper):
@@ -66,15 +68,21 @@ class BBBLinear(ModuleWrapper):
         else:
             self.bias_sigma = bias_var = None
 
-        act_mu = F.linear(x, self.W_mu, self.bias_mu)
-        act_var = 1e-16 + F.linear(x ** 2, self.W_sigma ** 2, bias_var)
-        act_std = torch.sqrt(act_var)
-
-        if self.training or sample:
-            eps = torch.empty(act_mu.size()).normal_(0, 1).to(self.device)
-            return act_mu + act_std * eps
+        weight_epsilon = torch.randn(self.out_features, self.in_features, device=x.device)
+        weight = self.W_mu + weight_epsilon * self.W_sigma
+        if self.use_bias:
+            bias_epsilon = torch.randn(self.out_features, device=x.device)
+            bias = self.bias_mu + bias_epsilon * self.bias_sigma
         else:
-            return act_mu
+            bias = None
+
+        out = F.linear(x, weight, bias)
+
+        x_flipped = torch.cat([x[:, 1:], x[:, :-1]], dim=1)
+        weight_flipped = torch.cat([weight[:, 1:], weight[:, :-1]], dim=1)
+        out_flipped = F.linear(x_flipped, weight_flipped, None)
+
+        return out + out_flipped
 
     def kl_loss(self):
         kl = KL_DIV(self.prior_mu, self.prior_sigma, self.W_mu, self.W_sigma)

@@ -1,8 +1,8 @@
 import metrics
-from models.BayesianModels.BayesianEffnetv2 import EffNetV2, effnetv2_m, effnetv2_l, effnetv2_xl, effnetv2_s
+from models.BayesianEffnetv2 import effnetv2_s
 import random
 from torch.backends import cudnn
-from pytorch_galaxy_datasets.galaxy_dataset import *
+from dataset.galaxy_dataset import *
 from args import *
 import torch
 from torch.utils.tensorboard import SummaryWriter

@@ -16,8 +16,7 @@ import numpy as np
 import math
 from torch import Tensor
 
-from layers import BBB_Linear, BBB_Conv2d
-from layers import BBB_LRT_Linear, BBB_LRT_Conv2d
+from layers import BBB_Flipout_Linear, BBB_Flipout_Conv2d
 from layers import FlattenLayer, ModuleWrapper
 import metrics
 
@@ -60,10 +59,10 @@ class SELayer(ModuleWrapper):
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Sequential(
             FlattenLayer(oup),
-            BBB_Linear(oup, _make_divisible(inp // reduction, 8)),
+            BBB_Flipout_Linear(oup, _make_divisible(inp // reduction, 8)),
             SiLU(),
             FlattenLayer(_make_divisible(inp // reduction, 8)),
-            BBB_Linear(_make_divisible(inp // reduction, 8), oup),
+            BBB_Flipout_Linear(_make_divisible(inp // reduction, 8), oup),
             nn.Sigmoid()
         )
 
@@ -85,7 +84,7 @@ class SELayer(ModuleWrapper):
 
 def conv_3x3_bn(inp, oup, stride):
     return nn.Sequential(
-        BBB_Conv2d(inp, oup, 3, stride, 1, bias=False),
+        BBB_Flipout_Conv2d(inp, oup, 3, stride, 1, bias=False),
         nn.BatchNorm2d(oup),
         SiLU()
     )
@@ -93,7 +92,7 @@ def conv_3x3_bn(inp, oup, stride):
 
 def conv_1x1_bn(inp, oup):
     return nn.Sequential(
-        BBB_Conv2d(inp, oup, 1, 1, 0, bias=False),
+        BBB_Flipout_Conv2d(inp, oup, 1, 1, 0, bias=False),
         nn.BatchNorm2d(oup),
         SiLU()
     )
@@ -109,26 +108,26 @@ class MBConv(ModuleWrapper):
         if use_se:
             self.conv = nn.Sequential(
                 # pw
-                BBB_Conv2d(inp, hidden_dim, 1, 1, 0, bias=False),
+                BBB_Flipout_Conv2d(inp, hidden_dim, 1, 1, 0, bias=False),
                 nn.BatchNorm2d(hidden_dim),
                 SiLU(),
                 # dw
-                BBB_Conv2d(hidden_dim, hidden_dim, 3, stride, 1, groups=hidden_dim, bias=False),
+                BBB_Flipout_Conv2d(hidden_dim, hidden_dim, 3, stride, 1, groups=hidden_dim, bias=False),
                 nn.BatchNorm2d(hidden_dim),
                 SiLU(),
                 SELayer(inp, hidden_dim),
                 # pw-linear
-                BBB_Conv2d(hidden_dim, oup, 1, 1, 0, bias=False),
+                BBB_Flipout_Conv2d(hidden_dim, oup, 1, 1, 0, bias=False),
                 nn.BatchNorm2d(oup),
             )
         else:
             self.conv = nn.Sequential(
                 # fused
-                BBB_Conv2d(inp, hidden_dim, 3, stride, 1, bias=False),
+                BBB_Flipout_Conv2d(inp, hidden_dim, 3, stride, 1, bias=False),
                 nn.BatchNorm2d(hidden_dim),
                 SiLU(),
                 # pw-linear
-                BBB_Conv2d(hidden_dim, oup, 1, 1, 0, bias=False),
+                BBB_Flipout_Conv2d(hidden_dim, oup, 1, 1, 0, bias=False),
                 nn.BatchNorm2d(oup),
             )
 
@@ -181,7 +180,7 @@ class EffNetV2(ModuleWrapper):
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.classifier = nn.Sequential(
             nn.Dropout(0.2),
-            BBB_Linear(output_channel, num_classes),
+            BBB_Flipout_Linear(output_channel, num_classes),
             ScaledSigmoid()
         )
 
@@ -198,7 +197,7 @@ class EffNetV2(ModuleWrapper):
         x = self.classifier(x)
         kl = 0.0
         for module in self.modules():
-            if isinstance(module, BBB_Conv2d) or isinstance(module, BBB_Linear):
+            if isinstance(module, BBB_Flipout_Conv2d) or isinstance(module, BBB_Flipout_Linear):
                 kl += module.kl_loss()
         self.kl += kl
         return x, self.kl
@@ -207,7 +206,7 @@ class EffNetV2(ModuleWrapper):
 
     def _initialize_weights(self):
         for m in self.modules():
-            if isinstance(m, BBB_Conv2d):
+            if isinstance(m, BBB_Flipout_Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
                 m.W_mu.data.normal_(0, math.sqrt(2. / n))
                 m.W_rho.data.normal_(0, math.sqrt(2. / n))
@@ -217,7 +216,7 @@ class EffNetV2(ModuleWrapper):
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
-            # elif isinstance(m, BBB_Linear):
+            # elif isinstance(m, BBB_Flipout_Linear):
             # m.W_sigma.data.normal_(0, 0.001)
             # m.bias_sigma.data.zero_()
 
