@@ -11,7 +11,7 @@ def get_data_config():
         'valid_file': "/data/renhaoye/MorCG_DECaLS/dataset/mw_valid.txt",
         'model_architecture': "Eff",
         'epochs': 100,
-        'batch_size': 256+64,
+        'batch_size': 256 + 64,
         'accelerator': "gpu",
         'gpus': 2,
         'nodes': 1,
@@ -20,7 +20,13 @@ def get_data_config():
         'dropout_rate': 0.2,
         'mixed_precision': False,
         'WORKERS': 20,
-        'transfer': transforms.Compose([transforms.ToTensor()]),
+        'transfer': transforms.Compose([
+            transforms.RandomRotation(degrees=(0, 90)),
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomCrop(224),
+            transforms.RandomAffine(degrees=30, translate=(0.1, 0.1), scale=(0.9, 1.1), shear=(-10, 10)),
+            transforms.ToTensor(),
+        ]),
         'lr': 0.0001,
         'optimizer': "torch.optim.Adam",
         'optimizer_parm': {'lr': 0.0001, 'betas': (0.9, 0.999)}
