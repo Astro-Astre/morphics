@@ -1,5 +1,3 @@
-import sys
-sys.path.append("") # Adds higher directory to python modules path.
 import torch
 import torch.nn.functional as F
 from torch.nn import Parameter
@@ -13,12 +11,12 @@ class BBBConv2d(ModuleWrapper):
         super(BBBConv2d, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.kernel_size = (kernel_size, kernel_size) # kernel_size is a tuple
-        self.stride = stride # stride is a tuple
-        self.padding = padding # padding is a tuple
-        self.dilation = dilation # dilation is a tuple
-        self.groups = groups # groups is an int
-        self.use_bias = bias # bias is a boolean
+        self.kernel_size = (kernel_size, kernel_size)
+        self.stride = stride
+        self.padding = padding
+        self.dilation = dilation
+        self.groups = groups
+        self.use_bias = bias
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # define priors

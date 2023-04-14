@@ -1,21 +1,42 @@
 import os
-import re
-# 指定文件夹路径
-folder_path = '/data/public/renhaoye/morphics/dataset/sdss/raw_fits/'
+import time
 
-# 初始化一个空的集合，用于存放所有唯一的 RA_DEC
-unique_ra_dec = set()
+def count_files_in_directory(directory):
+    return len([f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))])
 
-# 遍历文件夹中的文件
-for filename in os.listdir(folder_path):
-    # 判断是否符合 RA_DEC_i.fits 的命名规范
-    match = re.match(r'(\d+\.\d+)_(\d+\.\d+)_(g|r|z)_(\d+)\.fits', filename)
-    if match:
-        # 提取 RA_DEC
-        ra_dec = f"{match.group(1)}_{match.group(2)}"
-        unique_ra_dec.add(ra_dec)
+def format_time(remaining_time):
+    days, seconds = divmod(int(remaining_time), 86400)
+    hours, seconds = divmod(seconds, 3600)
+    minutes, seconds = divmod(seconds, 60)
+    return f"{days:02d}Days,{hours:02d}Hours,{minutes:02d}Min,{seconds:02d}Seconds"
 
-# 统计唯一 RA_DEC 的数量
-ra_dec_count = len(unique_ra_dec)
 
-print(f"文件夹 {folder_path} 中共有 {ra_dec_count} 个不同的 RA_DEC。")
+def monitor_directory(directory, interval=10):
+    prev_count = count_files_in_directory(directory)
+    total_length = count_lines("/data/public/renhaoye/urls.txt")
+    start_time = time.time()
+
+    while True:
+        time.sleep(interval)
+        current_count = count_files_in_directory(directory)
+
+        if current_count != prev_count:
+            diff = current_count - prev_count
+            elapsed_time = time.time() - start_time
+            speed = diff / elapsed_time
+            remaining_files = total_length - current_count
+            estimated_remaining_time = remaining_files / speed
+            formatted_remaining_time = format_time(estimated_remaining_time)
+            print(f"文件数量变化：{diff}，Finish：{current_count/total_length*100:.6f}% 预计剩余时间：{formatted_remaining_time}")
+
+            prev_count = current_count
+            start_time = time.time()
+
+def count_lines(filename):
+    with open(filename, 'r') as f:
+        lines = f.readlines()
+        return len(lines)
+
+if __name__ == "__main__":
+    directory_to_monitor = "/data/public/renhaoye/morphics/dataset/sdss/raw_fits"  # 修改为你要监控的文件夹路径
+    monitor_directory(directory_to_monitor)
