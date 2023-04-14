@@ -1,7 +1,8 @@
 import numpy as np
 from torch import nn
 from training.losses import *
-from shared import label_metadata, schemas
+from utils import label_metadata, schemas
+
 
 # 定义 ELBO 类，继承自 nn.Module
 class ELBO(nn.Module):

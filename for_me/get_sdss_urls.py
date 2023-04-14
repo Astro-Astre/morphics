@@ -1,4 +1,3 @@
-import concurrent.futures
 import pandas as pd
 from tqdm import tqdm
 import warnings
@@ -30,13 +29,6 @@ def get_url(i, files, f):
 
 def main():
     df = pd.read_csv("/data/public/renhaoye/morphics/dataset/sdss_mgs.csv")
-    index = list(range(len(df)))
-    # 使用 ThreadPoolExecutor 实现并发
-    # with concurrent.futures.ThreadPoolExecutor(max_workers=128 + 64) as executor:
-    #     futures = [executor.submit(get_url, i, df) for i in index]
-    #     for future in tqdm(concurrent.futures.as_completed(futures), total=len(futures)):
-    #         pass
-
     with open("/data/public/renhaoye/urls.txt", "a") as f:
         for idx in tqdm(range(len(df))):
             get_url(idx, df, f)

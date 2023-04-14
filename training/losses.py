@@ -24,15 +24,11 @@ def calculate_multiquestion_loss(labels, predictions, question_index_groups):
         q_indices = question_index_groups[q_n]
         q_start = q_indices[0]
         q_end = q_indices[1]
-        # print("labels", labels)
-        # print("predictions", predictions)
-        q_loss = dirichlet_loss(labels[:, q_start:q_end + 1], predictions[:, q_start:q_end + 1])
-        # exit()
+        q_loss = dirichlet_loss(labels[:, q_start:q_end + 1], torch.softmax(predictions[:, q_start:q_end + 1], dim=1)*99 + 1)
 
         q_losses.append(q_loss)
 
     total_loss = torch.stack(q_losses, axis=1)
-    # print(total_loss.shape)
     return total_loss  # leave the reduction to pytorch lightning
 
 

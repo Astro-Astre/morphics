@@ -3,7 +3,7 @@ from typing import List
 
 import numpy as np
 
-from shared import label_metadata
+from utils import label_metadata
 
 
 class Question():

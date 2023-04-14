@@ -1,8 +1,10 @@
 import os
 import time
 
+
 def count_files_in_directory(directory):
     return len([f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))])
+
 
 def format_time(remaining_time):
     days, seconds = divmod(int(remaining_time), 86400)
@@ -27,15 +29,18 @@ def monitor_directory(directory, interval=10):
             remaining_files = total_length - current_count
             estimated_remaining_time = remaining_files / speed
             formatted_remaining_time = format_time(estimated_remaining_time)
-            print(f"文件数量变化：{diff}，Finish：{current_count/total_length*100:.6f}% 预计剩余时间：{formatted_remaining_time}")
+            print(
+                f"文件数量变化：{diff}，Finish：{current_count / total_length * 100:.6f}% 预计剩余时间：{formatted_remaining_time}")
 
             prev_count = current_count
             start_time = time.time()
+
 
 def count_lines(filename):
     with open(filename, 'r') as f:
         lines = f.readlines()
         return len(lines)
+
 
 if __name__ == "__main__":
     directory_to_monitor = "/data/public/renhaoye/morphics/dataset/sdss/raw_fits"  # 修改为你要监控的文件夹路径

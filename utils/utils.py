@@ -7,6 +7,12 @@ from typing import List
 from galaxy_datasets.shared import label_metadata
 import numpy as np
 
+
+def mkdir(path):
+    if not os.path.isdir(path):
+        os.mkdir(path)
+
+
 def match(df_1, df_2, pixel, df1_name):
     """
     match two catalog
@@ -69,6 +75,7 @@ def answer_prob(out):
          out[32] / q10, out[33] / q10])
     return np.array(output)
 
+
 def extract_questions_and_label_cols(question_answer_pairs):
     """
     Convenience wrapper to get list of questions and label_cols from a schema.
@@ -93,14 +100,13 @@ gz2_pairs = {
     'bar': ['_strong', '_weak', '_no'],
     'bulge_size': ['_dominant', '_large', '_moderate', '_small', '_none'],
     'how_rounded': ['_round', '_in_between', '_cigar_shaped'],
-    'edge_on_bulge': ['_boxy', '_none', '_rounded'], # de
+    'edge_on_bulge': ['_boxy', '_none', '_rounded'],  # de
     'spiral_winding': ['_tight', '_medium', '_loose'],
     'spiral_arm_count': ['_1', '_2', '_3', '_4', '_more_than_4', '_cant_tell'],
-    'merging': ['_none', '_minor_disturbance', '_major_disturbance', '_merger'] # de
+    'merging': ['_none', '_minor_disturbance', '_major_disturbance', '_merger']  # de
 }
 
 gz2_questions, gz2_label_cols = extract_questions_and_label_cols(gz2_pairs)
-
 
 gz2_and_decals_dependencies = {
     'smooth_or_featured': None,  # always asked
@@ -111,13 +117,10 @@ gz2_and_decals_dependencies = {
     'how_rounded': 'smooth_or_featured_smooth',
     'edge_on_bulge': 'disk_edge_on_yes',
     'spiral_winding': 'has_spiral_arms_yes',
-    'spiral_arm_count': 'has_spiral_arms_yes', # bad naming...
+    'spiral_arm_count': 'has_spiral_arms_yes',  # bad naming...
     'merging': None,
 
 }
-
-
-
 
 
 class Question():
