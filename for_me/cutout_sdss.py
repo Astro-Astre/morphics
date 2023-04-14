@@ -87,14 +87,17 @@ def get_image(i, files):
 
 def main():
     filenames = os.listdir("/data/public/renhaoye/dataset/sdss/raw_fits")
+
     def extract_ra_dec(filename):
         match = re.search(r'(-?\d+\.\d+)_(-?\d+\.\d+)_\w+\.fits\.bz2', filename)
         if match:
             ra, dec = match.group(1), match.group(2)
             return ra, dec
         return None
+
     ra_dec_list = [extract_ra_dec(filename) for filename in filenames if extract_ra_dec(filename) is not None]
     ra_dec_df = pd.DataFrame(ra_dec_list, columns=['ra', 'dec'])
+
 
 if __name__ == '__main__':
     # main()

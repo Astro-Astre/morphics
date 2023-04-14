@@ -10,8 +10,17 @@ from training import losses, metrics
 import argparse
 from utils.utils import *
 from torchvision.models import *
+from bayesian_torch.models.dnn_to_bnn import dnn_to_bnn, get_kl_loss
 
-
+const_bnn_prior_parameters = {
+    "prior_mu": 0.0,
+    "prior_sigma": 1.0,
+    "posterior_mu_init": 0.0,
+    "posterior_rho_init": -3.0,
+    "type": "Flipout",  # Flipout or Reparameterization
+    "moped_enable": False,  # initialize mu/sigma from the dnn weights
+    "moped_delta": 0.2,
+}
 def init_rand_seed(rand_seed):
     torch.manual_seed(rand_seed)
     torch.cuda.manual_seed(rand_seed)  # 为当前GPU设置随机种子
@@ -47,10 +56,18 @@ class Trainer:
         for i, (X, label) in enumerate(train_loader):
             label = torch.as_tensor(label, dtype=torch.long).cuda()
             X = X.cuda()
-            out = self.model(X)
-            beta = metrics.get_beta(i - 1, len(train_loader), 0.1, epoch, self.config.epochs)
-            # loss_value = torch.mean(self.dirichlet_loss_func(out, label)) * len(train_loader) + beta * torch.mean(kl)
-            loss_value = torch.mean(self.dirichlet_loss_func(out, label))
+            output_ = []
+            kl_ = []
+            for mc_run in range(1):
+                output = self.model(X)
+                kl = get_kl_loss(self.model)
+                output_.append(output)
+                kl_.append(kl)
+            output = torch.mean(torch.stack(output_), dim=0)
+            kl = torch.mean(torch.stack(kl_), dim=0)
+            dirichlet_loss = torch.mean(self.dirichlet_loss_func(output, label), dim=0)
+            scaled_kl = kl / args.batch_size
+            loss_value = torch.mean(dirichlet_loss) + scaled_kl
             self.optimizer.zero_grad()
             loss_value.backward()
             self.optimizer.step()
@@ -66,9 +83,18 @@ class Trainer:
             for X, label in valid_loader:
                 label = torch.as_tensor(label, dtype=torch.long).cuda()
                 X = X.cuda()
-                test_out = self.model(X)
-                # test_loss = torch.mean(self.dirichlet_loss_func(test_out, label)) + torch.mean(test_kl)
-                test_loss = torch.mean(self.dirichlet_loss_func(test_out, label))
+                output_ = []
+                kl_ = []
+                for mc_run in range(1):
+                    output = self.model(X)
+                    kl = get_kl_loss(self.model)
+                    output_.append(output)
+                    kl_.append(kl)
+                output = torch.mean(torch.stack(output_), dim=0)
+                kl = torch.mean(torch.stack(kl_), dim=0)
+                dirichlet_loss = torch.mean(self.dirichlet_loss_func(output, label), dim=0)
+                scaled_kl = kl / args.batch_size
+                test_loss = dirichlet_loss + scaled_kl
                 eval_loss += test_loss.item()
         avg_eval_loss = eval_loss / len(valid_loader)
         writer.add_scalar('Validating loss by steps', avg_eval_loss, epoch)
@@ -100,20 +126,20 @@ class Trainer:
 
 
 def main(config):
+    model = efficientnet_v2_s(num_classes=34)
+    dnn_to_bnn(model, const_bnn_prior_parameters)
+
+    # torch.compile(model, mode="max-autotune", dynamic=True, fullgraph=True)
+    model = model.cuda()
     # Create data loaders
     train_data = GalaxyDataset(annotations_file=config.train_file, transform=config.transfer)
     train_loader = DataLoader(dataset=train_data, batch_size=config.batch_size,
                               shuffle=True, num_workers=config.WORKERS, pin_memory=True)
 
-    valid_data = GalaxyDataset(annotations_file=config.valid_file, transform=config.transfer)
+    valid_data = GalaxyDataset(annotations_file=config.valid_file, transform=transforms.Compose([transforms.ToTensor()]),)
     valid_loader = DataLoader(dataset=valid_data, batch_size=config.batch_size,
                               shuffle=True, num_workers=config.WORKERS, pin_memory=True)
 
-    model = efficientnet_v2_s(num_classes=34)
-
-    model = model.cuda()
-    # 用torch2.0的compile加速
-    model = torch.compile(model, mode="max-autotune", dynamic=True, fullgraph=True)
     device_ids = [0, 1]
     model = torch.nn.DataParallel(model, device_ids=device_ids)
     bayesian_loss_func = metrics.ELBO(len(train_data)).to("cuda")
