@@ -94,7 +94,7 @@ class Trainer:
                 kl = torch.mean(torch.stack(kl_), dim=0)
                 dirichlet_loss = torch.mean(self.dirichlet_loss_func(output, label), dim=0)
                 scaled_kl = kl / args.batch_size
-                test_loss = dirichlet_loss + scaled_kl
+                test_loss = torch.mean(dirichlet_loss) + scaled_kl
                 eval_loss += test_loss.item()
         avg_eval_loss = eval_loss / len(valid_loader)
         writer.add_scalar('Validating loss by steps', avg_eval_loss, epoch)
