@@ -11,6 +11,10 @@ import argparse
 from utils.utils import *
 from torchvision.models import *
 from bayesian_torch.models.dnn_to_bnn import dnn_to_bnn, get_kl_loss
+from models.morphics import Morphics
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+from models.utils import *
+
 
 const_bnn_prior_parameters = {
     "prior_mu": 0.0,
@@ -21,6 +25,8 @@ const_bnn_prior_parameters = {
     "moped_enable": False,  # initialize mu/sigma from the dnn weights
     "moped_delta": 0.2,
 }
+
+
 def init_rand_seed(rand_seed):
     torch.manual_seed(rand_seed)
     torch.cuda.manual_seed(rand_seed)  # 为当前GPU设置随机种子
@@ -42,16 +48,19 @@ class Trainer:
     def __init__(self, model, optimizer, config):
         self.model = model
         self.optimizer = optimizer
+        self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=5, verbose=True)
         self.config = config
         self.question_answer_pairs = gz2_pairs
         self.dependencies = gz2_and_decals_dependencies
         self.schema = schemas.Schema(self.question_answer_pairs, self.dependencies)
+        self.early_stopping = EarlyStopping(patience=7, verbose=True)
 
     def dirichlet_loss_func(self, preds, labels):
         return losses.calculate_multiquestion_loss(labels, preds, self.schema.question_index_groups)
 
     def train_epoch(self, train_loader, epoch, writer):
         train_loss = 0
+        train_kl = 0
         self.model.train()
         for i, (X, label) in enumerate(train_loader):
             label = torch.as_tensor(label, dtype=torch.long).cuda()
@@ -71,13 +80,17 @@ class Trainer:
             self.optimizer.zero_grad()
             loss_value.backward()
             self.optimizer.step()
-            train_loss += loss_value.item()
+            train_loss += dirichlet_loss.item()
+            train_kl += kl.item()
         avg_train_loss = train_loss / len(train_loader)
+        avg_train_kl = train_kl / len(train_loader)
         writer.add_scalar('Training loss by steps', avg_train_loss, epoch)
-        return avg_train_loss
+        writer.add_scalar('Training kl by steps', avg_train_kl, epoch)
+        return avg_train_loss, avg_train_kl
 
     def evaluate(self, valid_loader, epoch, writer):
         eval_loss = 0
+        eval_kl = 0
         with torch.no_grad():
             self.model.eval()
             for X, label in valid_loader:
@@ -95,10 +108,19 @@ class Trainer:
                 dirichlet_loss = torch.mean(self.dirichlet_loss_func(output, label), dim=0)
                 scaled_kl = kl / args.batch_size
                 test_loss = torch.mean(dirichlet_loss) + scaled_kl
-                eval_loss += test_loss.item()
+                eval_loss += dirichlet_loss.item()
+                eval_kl += kl.item()
+                self.scheduler.step(test_loss)
+                self.early_stopping(test_loss, self.model)
+                if self.early_stopping.early_stop:
+                    print("Early stopping")
+                    break
+
         avg_eval_loss = eval_loss / len(valid_loader)
+        avg_eval_kl = eval_kl / len(valid_loader)
         writer.add_scalar('Validating loss by steps', avg_eval_loss, epoch)
-        return avg_eval_loss
+        writer.add_scalar('Validating kl by steps', avg_eval_kl, epoch)
+        return avg_eval_loss, avg_eval_kl
 
     def save_checkpoint(self, epoch):
         checkpoint = {
@@ -116,17 +138,18 @@ class Trainer:
         writer = SummaryWriter(self.config.save_dir + "log/")
 
         for epoch in range(self.config.epochs):
-            train_loss = self.train_epoch(train_loader, epoch, writer)
-            print(f"epoch: {epoch}, loss: {train_loss}")
+            train_loss, train_kl = self.train_epoch(train_loader, epoch, writer)
+            print(f"epoch: {epoch}, loss: {train_loss}, kl: {train_kl}")
 
-            eval_loss = self.evaluate(valid_loader, epoch, writer)
-            print(f"valid_loss: {eval_loss}")
+            eval_loss, eval_kl = self.evaluate(valid_loader, epoch, writer)
+            print(f"valid_loss: {eval_loss}, valid_kl: {eval_kl}")
 
             self.save_checkpoint(epoch)
 
 
 def main(config):
     model = efficientnet_v2_s(num_classes=34)
+    model = Morphics(model)
     dnn_to_bnn(model, const_bnn_prior_parameters)
 
     # torch.compile(model, mode="max-autotune", dynamic=True, fullgraph=True)
@@ -136,7 +159,8 @@ def main(config):
     train_loader = DataLoader(dataset=train_data, batch_size=config.batch_size,
                               shuffle=True, num_workers=config.WORKERS, pin_memory=True)
 
-    valid_data = GalaxyDataset(annotations_file=config.valid_file, transform=transforms.Compose([transforms.ToTensor()]),)
+    valid_data = GalaxyDataset(annotations_file=config.valid_file,
+                               transform=transforms.Compose([transforms.ToTensor()]), )
     valid_loader = DataLoader(dataset=valid_data, batch_size=config.batch_size,
                               shuffle=True, num_workers=config.WORKERS, pin_memory=True)
 

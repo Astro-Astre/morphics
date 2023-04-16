@@ -45,3 +45,77 @@ def count_lines(filename):
 if __name__ == "__main__":
     directory_to_monitor = "/data/public/renhaoye/morphics/dataset/sdss/raw_fits"  # 修改为你要监控的文件夹路径
     monitor_directory(directory_to_monitor)
+
+
+# import os
+#
+#
+# def get_files_with_extension(directory, extension):
+#     return [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith(extension)]
+#
+#
+# def get_size(file_path):
+#     return os.path.getsize(file_path)
+#
+#
+# def remove_smallest_files(directory, extension, percentage):
+#     files = get_files_with_extension(directory, extension)
+#     if not files:
+#         print(f"No {extension} files found in {directory}")
+#         return
+#
+#     files_with_sizes = [(f, get_size(f)) for f in files]
+#     files_with_sizes.sort(key=lambda x: x[1])
+#
+#     num_files_to_remove = int(len(files_with_sizes) * percentage)
+#     removed_files = files_with_sizes[:num_files_to_remove]
+#
+#     for file_path, size in removed_files:
+#         os.remove(file_path)
+#         print(f"Removed {file_path} with size {size} bytes")
+#
+#
+# if __name__ == "__main__":
+#     directory = "/data/public/renhaoye/morphics/dataset/sdss/raw_fits/"  # 替换为你的文件夹路径
+#     extension = ".bz2"
+#     percentage = 0.01  # 更改为您希望删除的文件比例，这里是 10%
+#
+#     remove_smallest_files(directory, extension, percentage)
+
+# import os
+#
+#
+# def read_txt_file(file_path):
+#     with open(file_path, 'r') as f:
+#         lines = f.readlines()
+#     return lines
+#
+#
+# def write_txt_file(lines):
+#     with open("/data/public/renhaoye/urlss.txt", 'w') as f:
+#         f.writelines(lines)
+#
+#
+# def get_existing_filenames(directory):
+#     return set(os.listdir(directory))
+#
+#
+# def filter_urls_file(txt_file_path, directory):
+#     existing_files = get_existing_filenames(directory)
+#
+#     lines = read_txt_file(txt_file_path)
+#     filtered_lines = []
+#
+#     for line in lines:
+#         file_name = line.strip().split('/')[-1]
+#         if file_name not in existing_files:
+#             filtered_lines.append(line)
+#
+#     write_txt_file(filtered_lines)
+#
+#
+# if __name__ == "__main__":
+#     txt_file_path = "/data/public/renhaoye/urls.txt"  # 替换为你的txt文件路径
+#     directory = "/data/public/renhaoye/morphics/dataset/sdss/raw_fits/"  # 替换为你的文件夹路径
+#
+#     filter_urls_file(txt_file_path, directory)

@@ -9,7 +9,7 @@ def get_data_config():
         'train_file': "/data/public/renhaoye/morphics/dataset/train.txt",
         'valid_file': "/data/public/renhaoye/morphics/dataset/valid.txt",
         'model_architecture': "efficientnetv2_s",
-        'epochs': 100,
+        'epochs': 1000,
         'batch_size': 256,
         'accelerator': "gpu",
         'gpus': 2,
@@ -26,9 +26,9 @@ def get_data_config():
             transforms.RandomAffine(degrees=30, translate=(0.1, 0.1), scale=(0.9, 1.1), shear=(-10, 10)),
             transforms.ToTensor(),
         ]),
-        'lr': 0.0001,
+        'lr': 0.001,
         'optimizer': "torch.optim.Adam",
-        'optimizer_parm': {'lr': 0.0001, 'betas': (0.9, 0.999)}
+        'optimizer_parm': {'lr': 0.001, 'betas': (0.9, 0.999)}
     }
 
 
