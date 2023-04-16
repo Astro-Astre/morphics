@@ -23,8 +23,8 @@ class Morphics(nn.Module):
         self.expected_input_shape = (
             1,
             3,
-            224,
-            224,
+            256,
+            256,
         )
         self.ln_out_shape = get_output_shape(
             self.localization, self.expected_input_shape
