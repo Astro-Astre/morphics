@@ -10,7 +10,7 @@ def get_data_config():
         'valid_file': "/data/public/renhaoye/morphics/dataset/valid.txt",
         'model_architecture': "efficientnetv2_s",
         'epochs': 1000,
-        'batch_size': 256,
+        'batch_size': 128+64,
         'accelerator': "gpu",
         'gpus': 2,
         'nodes': 1,

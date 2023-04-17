@@ -15,7 +15,6 @@ from models.morphics import Morphics
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from models.utils import *
 
-
 const_bnn_prior_parameters = {
     "prior_mu": 0.0,
     "prior_sigma": 1.0,
@@ -53,7 +52,7 @@ class Trainer:
         self.question_answer_pairs = gz2_pairs
         self.dependencies = gz2_and_decals_dependencies
         self.schema = schemas.Schema(self.question_answer_pairs, self.dependencies)
-        self.early_stopping = EarlyStopping(patience=7, verbose=True)
+        self.early_stopping = EarlyStopping(patience=20, delta=0.0001, verbose=True)
 
     def dirichlet_loss_func(self, preds, labels):
         return losses.calculate_multiquestion_loss(labels, preds, self.schema.question_index_groups)
@@ -80,8 +79,8 @@ class Trainer:
             self.optimizer.zero_grad()
             loss_value.backward()
             self.optimizer.step()
-            train_loss += dirichlet_loss.item()
-            train_kl += kl.item()
+            train_loss += torch.mean(dirichlet_loss).item()
+            train_kl += scaled_kl.item()
         avg_train_loss = train_loss / len(train_loader)
         avg_train_kl = train_kl / len(train_loader)
         writer.add_scalar('Training loss by steps', avg_train_loss, epoch)
@@ -107,14 +106,9 @@ class Trainer:
                 kl = torch.mean(torch.stack(kl_), dim=0)
                 dirichlet_loss = torch.mean(self.dirichlet_loss_func(output, label), dim=0)
                 scaled_kl = kl / args.batch_size
-                test_loss = torch.mean(dirichlet_loss) + scaled_kl
-                eval_loss += dirichlet_loss.item()
-                eval_kl += kl.item()
-                self.scheduler.step(test_loss)
-                self.early_stopping(test_loss, self.model)
-                if self.early_stopping.early_stop:
-                    print("Early stopping")
-                    break
+                # test_loss = torch.mean(dirichlet_loss) + scaled_kl
+                eval_loss += torch.mean(dirichlet_loss).item()
+                eval_kl += scaled_kl.item()
 
         avg_eval_loss = eval_loss / len(valid_loader)
         avg_eval_kl = eval_kl / len(valid_loader)
@@ -142,9 +136,13 @@ class Trainer:
             print(f"epoch: {epoch}, loss: {train_loss}, kl: {train_kl}")
 
             eval_loss, eval_kl = self.evaluate(valid_loader, epoch, writer)
+            self.scheduler.step(eval_loss)
             print(f"valid_loss: {eval_loss}, valid_kl: {eval_kl}")
-
             self.save_checkpoint(epoch)
+            self.early_stopping(eval_loss + eval_kl, self.model)
+            if self.early_stopping.early_stop:
+                print("Early stopping")
+                break
 
 
 def main(config):
