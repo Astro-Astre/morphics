@@ -146,10 +146,16 @@ class Trainer:
 
 
 def main(config):
-    model = efficientnet_v2_s(num_classes=34)
+    model = efficientnet_v2_m(num_classes=34)
+    # model = efficientnet_b0(num_classes=34)
+    # model = vgg11_bn(num_classes=34)
     model = Morphics(model)
     dnn_to_bnn(model, const_bnn_prior_parameters)
+    def count_trainable_parameters(model):
+        return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
+    trainable_parameters = count_trainable_parameters(model)
+    print(f'The model has {trainable_parameters} trainable parameters.')
     # torch.compile(model, mode="max-autotune", dynamic=True, fullgraph=True)
     model = model.cuda()
 

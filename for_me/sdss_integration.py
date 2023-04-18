@@ -59,8 +59,8 @@ def integration(i, df):
     x_coords, y_coords = zip(*pix_coords)
 
     # 计算输出图像的尺寸
-    max_width = max([channel_data.shape[1] for channel_data in channels])
-    max_height = max([channel_data.shape[0] for channel_data in channels])
+    max_width = int(max([channel_data.shape[1] for channel_data in channels]) + max(x_coords) - min(x_coords))
+    max_height = int(max([channel_data.shape[0] for channel_data in channels]) + max(y_coords) - min(y_coords))
 
     # 创建输出图像
     output_shape = (3, max_height, max_width)
@@ -69,9 +69,9 @@ def integration(i, df):
     # 将每个通道的数据复制到输出图像上的正确位置
     for i, channel_data in enumerate(channels):
         x_min = int(x_coords[i] - min(x_coords))
-        x_max = int(x_min + channel_data.shape[1])
+        x_max = x_min + channel_data.shape[1]
         y_min = int(y_coords[i] - min(y_coords))
-        y_max = int(y_min + channel_data.shape[0])
+        y_max = y_min + channel_data.shape[0]
         output_data[i, y_min:y_max, x_min:x_max] = channel_data
 
     # 保存叠加后的FITS文件并写入WCS信息

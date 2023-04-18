@@ -1,3 +1,5 @@
+import torch
+import torch.nn.functional as F
 import os
 import pandas as pd
 import astropy.units as u
@@ -374,3 +376,71 @@ class Schema():
             for a in q.answers:
                 answers.append(a)
         return answers
+
+
+def get_uncertainty_per_image(model, input_image, T=15, normalized=False):
+    input_image = input_image.unsqueeze(0)
+    input_images = input_image.repeat(T, 1, 1, 1)
+
+    net_out = model(input_images)
+    pred = torch.mean(net_out, dim=0).cpu().detach().numpy()
+    if normalized:
+        prediction = F.softplus(net_out)
+        p_hat = prediction / torch.sum(prediction, dim=1).unsqueeze(1)
+    else:
+        p_hat = F.softmax(net_out, dim=1)
+    p_hat = p_hat.detach().cpu().numpy()
+    p_bar = np.mean(p_hat, axis=0)
+
+    temp = p_hat - np.expand_dims(p_bar, 0)
+    epistemic = np.dot(temp.T, temp) / T
+    epistemic = np.diag(epistemic)
+
+    aleatoric = np.diag(p_bar) - (np.dot(p_hat.T, p_hat) / T)
+    aleatoric = np.diag(aleatoric)
+
+    return pred, epistemic, aleatoric
+
+
+def get_uncertainty_per_batch(model, batch, T=15, normalized=False):
+    batch_predictions = []
+    net_outs = []
+    batches = batch.unsqueeze(0).repeat(T, 1, 1, 1, 1)
+
+    preds = []
+    epistemics = []
+    aleatorics = []
+
+    for i in range(T):  # for T batches
+        net_out, _ = model(batches[i].cuda())
+        net_outs.append(net_out)
+        if normalized:
+            prediction = F.softplus(net_out)
+            prediction = prediction / torch.sum(prediction, dim=1).unsqueeze(1)
+        else:
+            prediction = F.softmax(net_out, dim=1)
+        batch_predictions.append(prediction)
+
+    for sample in range(batch.shape[0]):
+        # for each sample in a batch
+        pred = torch.cat([a_batch[sample].unsqueeze(0) for a_batch in net_outs], dim=0)
+        pred = torch.mean(pred, dim=0)
+        preds.append(pred)
+
+        p_hat = torch.cat([a_batch[sample].unsqueeze(0) for a_batch in batch_predictions], dim=0).detach().cpu().numpy()
+        p_bar = np.mean(p_hat, axis=0)
+
+        temp = p_hat - np.expand_dims(p_bar, 0)
+        epistemic = np.dot(temp.T, temp) / T
+        epistemic = np.diag(epistemic)
+        epistemics.append(epistemic)
+
+        aleatoric = np.diag(p_bar) - (np.dot(p_hat.T, p_hat) / T)
+        aleatoric = np.diag(aleatoric)
+        aleatorics.append(aleatoric)
+
+    epistemic = np.vstack(epistemics)  # (batch_size, categories)
+    aleatoric = np.vstack(aleatorics)  # (batch_size, categories)
+    preds = torch.cat([i.unsqueeze(0) for i in preds]).cpu().detach().numpy()  # (batch_size, categories)
+
+    return preds, epistemic, aleatoric
