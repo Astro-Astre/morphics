@@ -29,7 +29,6 @@ class GalaxyDataset(Dataset):
         with open(annotations_file, "r") as file:
             imgs = []
             for line in file:
-                start = time.time()
                 line = line.strip("\n")
                 line = line.rstrip("\n")
                 words = line.split()
@@ -40,7 +39,6 @@ class GalaxyDataset(Dataset):
                 for vote in hidden:
                     votes.append(float(vote))
                 imgs.append((words[0], votes))
-                end = time.time()-start
         self.imgs = imgs
         self.transform = transform
 
@@ -68,7 +66,7 @@ class TestDataset(Dataset):
         imgs = []
         for i in range(len(files)):
             ra, dec = files[i].split(".fits")[0].split("_")
-            imgs.append((dir+files[i] ,str(ra), str(dec)))
+            imgs.append((dir + files[i], str(ra), str(dec)))
         self.imgs = imgs
         self.transform = transform
 

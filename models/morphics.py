@@ -35,7 +35,6 @@ class Morphics(nn.Module):
             nn.Linear(self.fc_in_size, 32), nn.ReLU(True), nn.Linear(32, 3)
         )
 
-
     def spatial_transform(self, x):
         xs = self.localization(x)
         xs = xs.view(-1, self.fc_in_size)

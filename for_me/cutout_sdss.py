@@ -2,21 +2,13 @@
 author: renhaoye
 function: 从sdss文件cutout出来
 """
-import concurrent.futures
 import io
 import multiprocessing
 import os
 from functools import partial
 import numpy as np
 from astropy.nddata import Cutout2D
-from astroquery.sdss import SDSS
-from astropy import coordinates as coords
-from astropy import units as u
 import pandas as pd
-from tqdm import tqdm
-import warnings
-from numpy import VisibleDeprecationWarning
-from warnings import simplefilter
 from astropy.io import fits
 import re
 from astropy.wcs import FITSFixedWarning, WCS
@@ -24,34 +16,13 @@ import bz2
 import warnings
 from numpy import VisibleDeprecationWarning
 from warnings import simplefilter
-from astropy.wcs import FITSFixedWarning
 
 warnings.filterwarnings("ignore", category=VisibleDeprecationWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings('ignore', category=FITSFixedWarning)
 simplefilter(action='ignore', category=FutureWarning)
-# path = "/data/public/renhaoye/74.28893482011404_-0.8270303005988735_g.fits.bz2"
 
 
-# def get_image(i, files):
-#     ra, dec = files.loc[i,"ra"], files.loc[i,"dec"]
-#     pos = coords.SkyCoord(ra=ra * u.degree, dec=dec * u.degree, frame="icrs")
-#     xid = SDSS.query_region(pos, spectro=False, radius=1 * u.arcsec)
-#
-#     im = SDSS.get_images(coordinates=pos, band='grz')
-#     for idx, image in enumerate(im, start=1):
-#         hdu = image[0]
-#         wcs = WCS(hdu.header)
-#         x, y = wcs.all_world2pix([[ra, dec]], 0)[0]
-#         position = (x, y)
-#
-#         if 0 <= x < hdu.data.shape[1] and 0 <= y < hdu.data.shape[0]:
-#             # cutout_size = np.array([256, 256]) * 0.262
-#             cutout_size = np.array([256, 256]) * 0.396
-#             cutout = Cutout2D(hdu.data, position, cutout_size, wcs=wcs)
-#             fits.writeto(f'/data/public/renhaoye/morphics/dataset/sdss/raw_fits/{ra}_{dec}_{image[0].header["FILTER"]}_{idx}.fits', cutout.data, cutout.wcs.to_header(),overwrite=True)
-
-#
 def get_image(i, files):
     ra, dec = files.loc[i, "ra"], files.loc[i, "dec"]
     # 定义文件名模板
@@ -60,51 +31,46 @@ def get_image(i, files):
         fits_bz2_filename = filename_template.format(ra=ra, dec=dec, filter=filter_name, idx=idx)
         if not os.path.isfile(fits_bz2_filename):
             continue
-        with bz2.open(fits_bz2_filename, "rb") as f:
-            decompressed_data = f.read()
-        with fits.open(io.BytesIO(decompressed_data)) as hdul:
-            hdu = hdul[0]
-            wcs = WCS(hdu.header)
-            x, y = wcs.all_world2pix([[float(ra), float(dec)]], 0)[0]
-            position = (x, y)
-            if 0 <= x < hdu.data.shape[1] and 0 <= y < hdu.data.shape[0]:
-                # print(fits_bz2_filename, "exist")
-                cutout_size = np.array([256, 256]) * 0.396
-                cutout = Cutout2D(hdu.data, position, cutout_size, wcs=wcs)
-                fits.writeto(
-                    f'/data/public/renhaoye/morphics/dataset/sdss/cutout/{ra}_{dec}_{filter_name}.fits',
-                    cutout.data, cutout.wcs.to_header(), overwrite=True)
-
-
-# def get_image(i, files):
-#     ra = 74.28893482011404
-#     dec = -0.8270303005988735
-#     with bz2.open(path, "rb") as f:
-#         decompressed_data = f.read()
-#     with fits.open(io.BytesIO(decompressed_data)) as hdul:
-#         hdu = hdul[0]
-#         wcs = WCS(hdu.header)
-#         x, y = wcs.all_world2pix([[ra, dec]], 0)[0]
-#         position = (x, y)
-#         if 0 <= x < hdu.data.shape[1] and 0 <= y < hdu.data.shape[0]:
-#             cutout_size = np.array([256, 256]) * 0.396
-#             cutout = Cutout2D(hdu.data, position, cutout_size, wcs=wcs)
-#             fits.writeto(
-#                 f'/data/public/renhaoye/{ra}_{dec}_g.fits',
-#                 cutout.data, cutout.wcs.to_header(), overwrite=True)
+        if not os.path.exists(f"/data/public/renhaoye/morphics/dataset/sdss/cutout/{ra}_{dec}_{filter_name}.fits"):
+            try:
+                with bz2.open(fits_bz2_filename, "rb") as f:
+                    decompressed_data = f.read()
+                with fits.open(io.BytesIO(decompressed_data)) as hdul:
+                    hdu = hdul[0]
+                    wcs = WCS(hdu.header)
+                    x, y = wcs.all_world2pix([[float(ra), float(dec)]], 0)[0]
+                    position = (x, y)
+                    if 0 <= x < hdu.data.shape[1] and 0 <= y < hdu.data.shape[0]:
+                        cutout_size = np.array([256, 256]) * 0.396
+                        cutout = Cutout2D(hdu.data, position, cutout_size, wcs=wcs)
+                        fits.writeto(
+                            f'/data/public/renhaoye/morphics/dataset/sdss/cutout/{ra}_{dec}_{filter_name}.fits',
+                            cutout.data, cutout.wcs.to_header(), overwrite=True)
+            except:
+                print(fits_bz2_filename)
 
 
 def main():
-    filenames = os.listdir("/data/public/renhaoye/morphics/dataset/sdss/raw_fits")
+    raw_fits_path = "/data/public/renhaoye/morphics/dataset/sdss/raw_fits"
+    cutout_path = "/data/public/renhaoye/morphics/dataset/sdss/cutout"
 
     def extract_ra_dec(filename):
-        match = re.search(r'(-?\d+\.\d+)_(-?\d+\.\d+)_\w+\.fits\.bz2', filename)
+        match = re.search(r'(-?\d+\.\d+)_(-?\d+\.\d+)_\w+\.fits(\.bz2)?', filename)
         if match:
             ra, dec = match.group(1), match.group(2)
-            return ra, dec
+            return (ra, dec)  # 返回一个字符串元组
         return None
 
-    ra_dec_list = [extract_ra_dec(filename) for filename in filenames if extract_ra_dec(filename) is not None]
+    # 获取已经在cutout文件夹中的(ra, dec)坐标
+    cutout_files = os.listdir(cutout_path)
+    cutout_ra_dec_set = set(
+        extract_ra_dec(filename) for filename in cutout_files if extract_ra_dec(filename) is not None)
+
+    # 获取原始数据中的(ra, dec)坐标并排除已在cutout文件夹中的坐标
+    filenames = os.listdir(raw_fits_path)
+    ra_dec_list = [extract_ra_dec(filename) for filename in filenames if
+                   extract_ra_dec(filename) is not None and extract_ra_dec(filename) not in cutout_ra_dec_set]
+
     ra_dec_df = pd.DataFrame(ra_dec_list, columns=['ra', 'dec'])
     return ra_dec_df
 

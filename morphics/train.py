@@ -4,7 +4,7 @@ from dataset.galaxy_dataset import *
 from args import *
 import torch
 from torch.utils.tensorboard import SummaryWriter
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from utils import schemas
 from training import losses, metrics
 import argparse
@@ -152,19 +152,25 @@ def main(config):
 
     # torch.compile(model, mode="max-autotune", dynamic=True, fullgraph=True)
     model = model.cuda()
+
+    # 定义要加载的数据子集的大小和索引
+    subset_size = 1000
+    subset_indices = list(range(subset_size))
     # Create data loaders
     train_data = GalaxyDataset(annotations_file=config.train_file, transform=config.transfer)
+    train_data = Subset(train_data, subset_indices)
     train_loader = DataLoader(dataset=train_data, batch_size=config.batch_size,
                               shuffle=True, num_workers=config.WORKERS, pin_memory=True)
 
     valid_data = GalaxyDataset(annotations_file=config.valid_file,
                                transform=transforms.Compose([transforms.ToTensor()]), )
+    valid_data = Subset(valid_data, subset_indices)
     valid_loader = DataLoader(dataset=valid_data, batch_size=config.batch_size,
                               shuffle=True, num_workers=config.WORKERS, pin_memory=True)
 
     device_ids = [0, 1]
     model = torch.nn.DataParallel(model, device_ids=device_ids)
-    bayesian_loss_func = metrics.ELBO(len(train_data)).to("cuda")
+    # bayesian_loss_func = metrics.ELBO(len(train_data)).to("cuda")
     optimizer = eval(config.optimizer)(model.parameters(), **config.optimizer_parm)
 
     trainer = Trainer(model=model, optimizer=optimizer, config=config)

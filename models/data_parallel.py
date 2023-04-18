@@ -1,7 +1,9 @@
 from torch.nn.parallel import DataParallel  # Import DataParallel from PyTorch's nn.parallel module
 import torch  # Import PyTorch library
 from torch.nn.parallel._functions import Scatter  # Import Scatter function from PyTorch's nn.parallel._functions module
-from torch.nn.parallel.parallel_apply import parallel_apply  # Import parallel_apply function from PyTorch's nn.parallel.parallel_apply module
+from torch.nn.parallel.parallel_apply import \
+    parallel_apply  # Import parallel_apply function from PyTorch's nn.parallel.parallel_apply module
+
 
 # Define scatter function that scatters the input tensor to multiple devices
 def scatter(inputs, target_gpus, chunk_sizes, dim=0):
@@ -33,6 +35,7 @@ def scatter(inputs, target_gpus, chunk_sizes, dim=0):
     finally:
         scatter_map = None  # Clear scatter_map to free memory
 
+
 # Define scatter_kwargs function to scatter both input tensors and keyword arguments
 def scatter_kwargs(inputs, kwargs, target_gpus, chunk_sizes, dim=0):
     inputs = scatter(inputs, target_gpus, chunk_sizes, dim) if inputs else []  # Scatter input tensors if any
@@ -40,17 +43,20 @@ def scatter_kwargs(inputs, kwargs, target_gpus, chunk_sizes, dim=0):
     if len(inputs) < len(kwargs):  # Check if the number of inputs is less than the number of keyword arguments
         inputs.extend([() for _ in range(len(kwargs) - len(inputs))])  # Extend inputs with empty tuples
     elif len(kwargs) < len(inputs):  # Check if the number of keyword arguments is less than the number of inputs
-        kwargs.extend([{} for _ in range(len(inputs) - len(kwargs))])  # Extend keyword arguments with empty dictionaries
+        kwargs.extend(
+            [{} for _ in range(len(inputs) - len(kwargs))])  # Extend keyword arguments with empty dictionaries
     inputs = tuple(inputs)  # Convert inputs to a tuple
     kwargs = tuple(kwargs)  # Convert keyword arguments to a tuple
     return inputs, kwargs  # Return the scattered inputs and keyword arguments
+
 
 # Define BalancedDataParallel class that extends DataParallel to support balanced data distribution among multiple GPUs
 class BalancedDataParallel(DataParallel):
     # Initialize the class with GPU 0 batch size, and pass other arguments and keyword arguments to the parent class
     def __init__(self, gpu0_bsz, *args, **kwargs):
         self.gpu0_bsz = gpu0_bsz  # Store GPU 0 batch size as an instance variable
-        super().__init__(*args, **kwargs)  # Call the initialization method of the parent class with the remaining args and kwargs
+        super().__init__(*args,
+                         **kwargs)  # Call the initialization method of the parent class with the remaining args and kwargs
 
     # Define forward method to handle the forward pass of the input through the model
     def forward(self, *inputs, **kwargs):
@@ -60,18 +66,22 @@ class BalancedDataParallel(DataParallel):
             device_ids = self.device_ids[1:]  # Ignore the first device ID (GPU 0) and use the remaining device IDs
         else:
             device_ids = self.device_ids  # Use all the device IDs
-        inputs, kwargs = self.scatter(inputs, kwargs, device_ids)  # Scatter the inputs and kwargs across the target devices
+        inputs, kwargs = self.scatter(inputs, kwargs,
+                                      device_ids)  # Scatter the inputs and kwargs across the target devices
         if len(self.device_ids) == 1:  # Check if there is only one device ID
-            return self.module(*inputs[0], **kwargs[0])  # Perform the forward pass on the module with the first set of inputs and kwargs
+            return self.module(*inputs[0], **kwargs[
+                0])  # Perform the forward pass on the module with the first set of inputs and kwargs
         replicas = self.replicate(self.module, self.device_ids)  # Create replicas of the module on each target device
         if self.gpu0_bsz == 0:  # Check if GPU 0 batch size is set to 0
             replicas = replicas[1:]  # Ignore the first replica (GPU 0) and use the remaining replicas
-        outputs = self.parallel_apply(replicas, device_ids, inputs, kwargs)  # Apply the forward pass in parallel using the replicas, device IDs, inputs, and kwargs
+        outputs = self.parallel_apply(replicas, device_ids, inputs,
+                                      kwargs)  # Apply the forward pass in parallel using the replicas, device IDs, inputs, and kwargs
         return self.gather(outputs, self.output_device)  # Gather the outputs from all devices to the output device
 
     # Define parallel_apply method that applies the forward pass in parallel using the replicas, device IDs, inputs, and kwargs
     def parallel_apply(self, replicas, device_ids, inputs, kwargs):
-        return parallel_apply(replicas, inputs, kwargs, device_ids)  # Call the parallel_apply function with the given arguments
+        return parallel_apply(replicas, inputs, kwargs,
+                              device_ids)  # Call the parallel_apply function with the given arguments
 
         # Define scatter method that scatters the inputs and kwargs across the target devices
 
