@@ -136,7 +136,7 @@ class Trainer:
             print(f"epoch: {epoch}, loss: {train_loss}, kl: {train_kl}")
 
             eval_loss, eval_kl = self.evaluate(valid_loader, epoch, writer)
-            self.scheduler.step(eval_loss)
+            self.scheduler.step(eval_loss + eval_kl)
             print(f"valid_loss: {eval_loss}, valid_kl: {eval_kl}")
             self.save_checkpoint(epoch)
             self.early_stopping(eval_loss + eval_kl, self.model)
