@@ -47,6 +47,8 @@ class Morphics(nn.Module):
         theta[:, 1, 1] = crop_para[:, 0]
         theta[:, [0, 1], [2, 2]] = crop_para[:, 1:]
 
+        # size = [x.size(0), x.size(1), 128, 128]
+        # grid = F.affine_grid(theta, size, align_corners=True)
         grid = F.affine_grid(theta, x.size(), align_corners=True)
         x = F.grid_sample(x, grid, align_corners=True)
 

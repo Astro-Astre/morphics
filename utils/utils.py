@@ -125,6 +125,30 @@ gz2_and_decals_dependencies = {
 }
 
 
+def softmax_output(input, question_index_groups):
+    input_shape = input.shape
+    batched_input = input.unsqueeze(0) if len(input_shape) == 1 else input
+
+    result = torch.zeros_like(batched_input)
+
+    for q_n in range(len(question_index_groups)):
+        q_indices = question_index_groups[q_n]
+        q_start = q_indices[0]
+        q_end = q_indices[1]
+
+        # 对输入的子数组进行softmax操作
+        input_slice = batched_input[:, q_start:q_end]
+        softmax_result = torch.softmax(input_slice, dim=1) * 99 + 1
+
+        # 将softmax结果存储在与输入相同形状的数组中
+        result[:, q_start:q_end] = softmax_result
+
+    if len(input_shape) == 1:
+        result = result.squeeze(0)
+
+    return result
+
+
 class Question():
 
     def __init__(self, question_text: str, answer_text: List, label_cols: List):

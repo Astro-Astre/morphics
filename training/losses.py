@@ -25,6 +25,7 @@ def calculate_multiquestion_loss(labels, predictions, question_index_groups):
         q_start = q_indices[0]
         q_end = q_indices[1]
         q_loss = dirichlet_loss(labels[:, q_start:q_end + 1], torch.softmax(predictions[:, q_start:q_end + 1], dim=1)*99 + 1)
+        # q_loss = dirichlet_loss(labels[:, q_start:q_end + 1], predictions[:, q_start:q_end + 1])
 
         q_losses.append(q_loss)
 
