@@ -1,4 +1,4 @@
-# LEMON: gaLaxy survEy MorpholOgical classification by bayesian cNn
+# Morphics: gaLaxy survEy MorpholOgical classification by bayesian cNn
 [![arxiv](1)](1)
 [![Build Status](https://travis-ci.org/LSSTDESC/Morphics.svg?branch=master)](https://travis-ci.org/LSSTDESC/Morphics)
 [![Coverage Status](https://coveralls.io/repos/github/LSSTDESC/Morphics/badge.svg?branch=master)](https://coveralls.io/github/LSSTDESC/Morphics?branch=master)
