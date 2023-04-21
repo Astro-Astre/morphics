@@ -40,7 +40,8 @@ class Trainer:
         self.config = config
         self.model = model
         self.optimizer = optimizer
-        self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=self.config.patience, verbose=True)
+        self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=self.config.patience,
+                                           verbose=True)
         self.question_answer_pairs = gz2_pairs
         self.dependencies = gz2_and_decals_dependencies
         self.schema = schemas.Schema(self.question_answer_pairs, self.dependencies)
@@ -54,12 +55,12 @@ class Trainer:
         train_kl = 0
         self.model.train()
         for i, (X, label) in enumerate(train_loader):
-            label = torch.as_tensor(label, dtype=torch.long).cuda()
-            X = X.cuda()
+            label = torch.as_tensor(label, dtype=torch.long).to("cuda:1")
+            X = X.to("cuda:1")
             output_ = []
             kl_ = []
             for mc_run in range(self.config.sample):
-                output = self.model(X)
+                output, _ = self.model(X)
                 kl = get_kl_loss(self.model)
                 output_.append(output)
                 kl_.append(kl)
@@ -85,12 +86,12 @@ class Trainer:
         with torch.no_grad():
             self.model.eval()
             for X, label in valid_loader:
-                label = torch.as_tensor(label, dtype=torch.long).cuda()
-                X = X.cuda()
+                label = torch.as_tensor(label, dtype=torch.long).to("cuda:1")
+                X = X.to("cuda:1")
                 output_ = []
                 kl_ = []
                 for mc_run in range(self.config.sample):
-                    output = self.model(X)
+                    output, _  = self.model(X)
                     kl = get_kl_loss(self.model)
                     output_.append(output)
                     kl_.append(kl)
@@ -137,9 +138,9 @@ class Trainer:
 
 def main(config):
     model = efficientnet_v2_s(num_classes=34, dropout=config.dropout_rate)
-    model = Morphics(model)
     dnn_to_bnn(model, const_bnn_prior_parameters)
-    model = model.cuda()
+    model = Morphics(model)
+    model = model.to("cuda:1")
     subset_size = 1000
     subset_indices = list(range(subset_size))
 
@@ -153,7 +154,7 @@ def main(config):
     # valid_data = Subset(valid_data, subset_indices)
     valid_loader = DataLoader(dataset=valid_data, batch_size=config.batch_size,
                               shuffle=True, num_workers=config.WORKERS, pin_memory=True)
-    device_ids = [0, 1]
+    device_ids = [1]
     model = torch.nn.DataParallel(model, device_ids=device_ids)
     optimizer = torch.optim.Adam(model.parameters(), lr=config.lr, betas=config.betas)
     trainer = Trainer(model=model, optimizer=optimizer, config=config)

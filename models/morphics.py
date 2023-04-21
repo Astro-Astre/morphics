@@ -55,7 +55,7 @@ class Morphics(nn.Module):
         return x
 
     def forward(self, x):
-        x = self.spatial_transform(x)
-        x = self.model(x)
+        stn = self.spatial_transform(x)
+        x = self.model(stn)
 
-        return x
+        return x, stn

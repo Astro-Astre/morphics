@@ -40,6 +40,5 @@ def run():
     print(ale_mnist_norm)
 
 
-
 if __name__ == '__main__':
     run()
