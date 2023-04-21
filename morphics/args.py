@@ -4,7 +4,7 @@ import torchvision.transforms as transforms
 def get_data_config():
     return {
         'root': "/data/public/renhaoye/morphics/",
-        'save_dir': "/data/public/renhaoye/morphics/pth/",
+        'save_dir': "/data/public/renhaoye/morphics/pth_stn/",
         'catalog_loc': "/data/renhaoye/mw_catalog.csv",
         'train_file': "/data/public/renhaoye/morphics/dataset/train.txt",
         'valid_file': "/data/public/renhaoye/morphics/dataset/valid.txt",

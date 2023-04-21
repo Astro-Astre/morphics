@@ -15,40 +15,44 @@ class Morphics(nn.Module):
         self.localization = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=11),
             nn.MaxPool2d(3, stride=2),
-            nn.ReLU(True),
+            nn.ReLU(),
             nn.Conv2d(64, 96, kernel_size=9),
             nn.MaxPool2d(3, stride=2),
-            nn.ReLU(True),
+            nn.ReLU(),
         )
+        self.cutout_size = 256
+        self.channels = 3
         self.expected_input_shape = (
             1,
-            3,
-            256,
-            256,
+            self.channels,
+            self.cutout_size,
+            self.cutout_size,
         )
+        # Calculate the output size of the localization network
         self.ln_out_shape = get_output_shape(
             self.localization, self.expected_input_shape
         )
+
         # Calculate the input size of the upcoming FC layer
         self.fc_in_size = torch.prod(torch.tensor(self.ln_out_shape[-3:]))
+
+        # Fully-connected regression network predicrs the parameters
+        # necessary for an attention tracking transformation
         self.fc_loc = nn.Sequential(
-            nn.Linear(self.fc_in_size, 32), nn.ReLU(True), nn.Linear(32, 3)
+            nn.Linear(self.fc_in_size, 32), nn.ReLU(), nn.Linear(32, 6)
         )
+
+        # Initialize the weights/bias with identity transformation
+        self.fc_loc[2].weight.data.zero_()
+        ident = [1, 0, 0, 0, 1, 0]
+        self.fc_loc[2].bias.data.copy_(torch.tensor(ident, dtype=torch.float))
 
     def spatial_transform(self, x):
         xs = self.localization(x)
         xs = xs.view(-1, self.fc_in_size)
-        crop_para = self.fc_loc(xs)
+        theta = self.fc_loc(xs)
+        theta = theta.view(-1, 2, 3)
 
-        # Initialize the transformation matrix
-        theta = torch.zeros(crop_para.shape[0], 2, 3).to(crop_para.device)
-
-        theta[:, 0, 0] = crop_para[:, 0]
-        theta[:, 1, 1] = crop_para[:, 0]
-        theta[:, [0, 1], [2, 2]] = crop_para[:, 1:]
-
-        # size = [x.size(0), x.size(1), 128, 128]
-        # grid = F.affine_grid(theta, size, align_corners=True)
         grid = F.affine_grid(theta, x.size(), align_corners=True)
         x = F.grid_sample(x, grid, align_corners=True)
 
