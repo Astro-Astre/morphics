@@ -18,7 +18,6 @@ from tllib.utils.metric import accuracy
 from tllib.utils.analysis import collect_feature, tsne, a_distance
 import torchvision.transforms as transforms
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 from torch.backends import cudnn
 from dataset.galaxy_dataset import *
 import torch
@@ -51,44 +50,41 @@ class Transfer:
     def dirichlet_loss_func(self, preds, labels):
         return losses.calculate_multiquestion_loss(labels, preds, self.schema.question_index_groups)
 
-    def train_epoch(self, train_source_iter: ForeverDataIterator, train_target_iter: ForeverDataIterator, model: ImageClassifier,
-          domain_adv: ConditionalDomainAdversarialLoss, optimizer: SGD,
-          lr_scheduler: LambdaLR, epoch: int, args: argparse.Namespace):
-        model.train()
+    def train_epoch(self, train_source_iter: ForeverDataIterator, train_target_iter: ForeverDataIterator,
+          domain_adv: ConditionalDomainAdversarialLoss, epoch: int):
+        self.model.train()
         domain_adv.train()
         for i in range(args.iters_per_epoch):
             x_s, labels_s = next(train_source_iter)[:2]
             x_t, = next(train_target_iter)[:1]
-
             x_s = x_s.to(device)
             x_t = x_t.to(device)
             labels_s = labels_s.to(device)
 
             # compute output
             x = torch.cat((x_s, x_t), dim=0)
-            y, f = model(x)
+            y, f = self.model(x)
             y_s, y_t = y.chunk(2, dim=0)
             f_s, f_t = f.chunk(2, dim=0)
 
-            cls_loss = F.cross_entropy(y_s, labels_s)
+            dirich_loss = self.dirichlet_loss_func(y_s, labels_s)
             transfer_loss = domain_adv(y_s, f_s, y_t, f_t)
-            domain_acc = domain_adv.domain_discriminator_accuracy
-            loss = cls_loss + transfer_loss * args.trade_off
-
-            cls_acc = accuracy(y_s, labels_s)[0]
+            s_kl = self.model.get_kl / self.config.batch_size
+            loss = dirich_loss + transfer_loss * self.config.trade_off + s_kl
 
             losses.update(loss.item(), x_s.size(0))
             # compute gradient and do SGD step
-            optimizer.zero_grad()
+            self.optimizer.zero_grad()
             loss.backward()
-            optimizer.step()
-            lr_scheduler.step()
+            self.optimizer.step()
+            self.lr_scheduler.step()
 
     def train(self, train_source_loader, train_target_loader, val_loader, model, domain_adv, optimizer, lr_scheduler, args):
         train_source_iter = ForeverDataIterator(train_source_loader)
         train_target_iter = ForeverDataIterator(train_target_loader)
         for epoch in range(args.epochs):
-            self.train_epoch(train_source_iter, train_target_iter, model, domain_adv, optimizer, lr_scheduler, epoch, args)
+            train_epoch(train_source_iter, train_target_iter, model, domain_adv, optimizer, lr_scheduler, epoch, args)
+
             val_acc = self.validate(val_loader, model, args)
             self.scheduler.step(val_acc)
             self.early_stopping(val_acc, model)
@@ -132,47 +128,8 @@ def main(config):
     ).to(device)
 
     transfer = Transfer(classifier, optimizer, config)
-    writer = SummaryWriter(config.save_dir)
-    transfer.train_epoch(train_source_loader, 0, writer)
-    for epoch in range(config.epochs):
-        train(train_source_iter, train_target_iter, classifier, domain_adv, optimizer,
-              lr_scheduler, epoch, config)
-        # evaluate on validation set
-        acc1 = utils.validate(val_loader, classifier, config, device)
-
-
-def train(train_source_iter: ForeverDataIterator, train_target_iter: ForeverDataIterator, model: ImageClassifier,
-          domain_adv: ConditionalDomainAdversarialLoss, optimizer: SGD,
-          lr_scheduler: LambdaLR, epoch: int, args: argparse.Namespace):
-    model.train()
-    domain_adv.train()
-    for i in range(args.iters_per_epoch):
-        x_s, labels_s = next(train_source_iter)[:2]
-        x_t, = next(train_target_iter)[:1]
-
-        x_s = x_s.to(device)
-        x_t = x_t.to(device)
-        labels_s = labels_s.to(device)
-
-        # compute output
-        x = torch.cat((x_s, x_t), dim=0)
-        y, f = model(x)
-        y_s, y_t = y.chunk(2, dim=0)
-        f_s, f_t = f.chunk(2, dim=0)
-
-        cls_loss = F.cross_entropy(y_s, labels_s)
-        transfer_loss = domain_adv(y_s, f_s, y_t, f_t)
-        domain_acc = domain_adv.domain_discriminator_accuracy
-        loss = cls_loss + transfer_loss * args.trade_off
-
-        cls_acc = accuracy(y_s, labels_s)[0]
-
-        losses.update(loss.item(), x_s.size(0))
-        # compute gradient and do SGD step
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        lr_scheduler.step()
+    transfer.train(train_source_loader, train_target_loader, val_loader, classifier, domain_adv,
+                   optimizer, lr_scheduler, config)
 
 
 if __name__ == '__main__':
