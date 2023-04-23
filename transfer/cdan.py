@@ -244,18 +244,17 @@ class Transfer:
             y_s, y_t = y.chunk(2, dim=0)
             f_s, f_t = f.chunk(2, dim=0)
 
-            dirich_loss = self.dirichlet_loss_func(y_s, labels_s)
+            dirich_loss = torch.mean(self.dirichlet_loss_func(y_s, labels_s))
             transfer_loss = domain_adv(y_s, f_s, y_t, f_t)
             kl = get_kl_loss(self.model) / self.config.batch_size
             loss = dirich_loss + transfer_loss * self.config.trade_off + kl
-
-            losses.update(loss.item(), x_s.size(0))
+            losses = loss.item() / self.config.batch_size
 
             # compute gradient and do SGD step
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
-            return losses
+            return dirich_loss.item(), kl.item(), transfer_loss.item()
 
     # def eval(self, val_iter, domain_adv):
     #     eval_loss = 0
@@ -274,7 +273,7 @@ class Transfer:
         }
         os.makedirs(f'{self.config.save_dir}/checkpoint', exist_ok=True)
         torch.save(checkpoint, f'{self.config.save_dir}/checkpoint/ckpt_best_{epoch}.pth')
-        torch.save(self.model.module, f'{self.config.save_dir}/model_{epoch}.pt')
+        torch.save(self.model, f'{self.config.save_dir}/model_{epoch}.pt')
 
     def train(self, train_source_loader, train_target_loader, val_loader, domain_adv):
         print("你又来迁移丹辣！")
@@ -347,7 +346,7 @@ class ClassifierBase(nn.Module):
         return self._features_dim
 
     def register_intermediate_hook(self):
-        target_layer = list(list(self.model.children())[0].children())[-3]
+        target_layer = list(list(self.model.children())[0].children())[-2]
         target_layer.register_forward_hook(self.hook)
 
     def hook(self, module, input, output):
@@ -356,7 +355,7 @@ class ClassifierBase(nn.Module):
     def forward(self, x: torch.Tensor):
         predictions, stn = self.model(x)
         if self.training:
-            return predictions, stn, self.intermediate_output
+            return predictions, stn, torch.squeeze(self.intermediate_output)
         else:
             return predictions, stn
 
@@ -388,7 +387,7 @@ def main(config):
     val_loader = DataLoader(dataset=val_dataset, batch_size=config.batch_size,
                             shuffle=False, num_workers=config.WORKERS, pin_memory=True)
 
-    backbone = torch.load(config.model_path)
+    backbone = torch.load(config.model_path, map_location=config.device)
     classifier = ClassifierBase(config.num_classes, backbone, True).to(config.device)
     classifier_feature_dim = classifier.features_dim
 
@@ -408,7 +407,7 @@ def main(config):
     domain_adv = ConditionalDomainAdversarialLoss(
         domain_discri, entropy_conditioning=config.entropy,
         num_classes=config.num_classes, features_dim=classifier_feature_dim, randomized=config.randomized,
-        randomized_dim=config.randomized_dim, reduction='none'
+        randomized_dim=config.randomized_dim, reduction='mean'
     ).to(config.device)
 
     transfer = Transfer(classifier, optimizer, config)
