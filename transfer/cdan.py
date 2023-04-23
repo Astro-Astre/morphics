@@ -199,7 +199,7 @@ class ConditionalDomainAdversarialLoss(nn.Module):
                 torch.ones((g_s.size(0), 1)).to(g_s.device),
                 torch.zeros((g_t.size(0), 1)).to(g_t.device),
             ))
-            self.domain_discriminator_accuracy = binary_accuracy(d, d_label)
+            # self.domain_discriminator_accuracy = binary_accuracy(d, d_label)
             if self.entropy_conditioning:
                 return F.binary_cross_entropy(d, d_label, weight.view_as(d), reduction=self.reduction)
             else:
@@ -209,7 +209,7 @@ class ConditionalDomainAdversarialLoss(nn.Module):
                 torch.ones((g_s.size(0),)).to(g_s.device),
                 torch.zeros((g_t.size(0),)).to(g_t.device),
             )).long()
-            self.domain_discriminator_accuracy = accuracy(d, d_label)
+            # self.domain_discriminator_accuracy = accuracy(d, d_label)
             if self.entropy_conditioning:
                 raise NotImplementedError("entropy_conditioning")
             return F.cross_entropy(d, d_label, reduction=self.reduction)
@@ -230,7 +230,7 @@ class Transfer:
     def dirichlet_loss_func(self, preds, labels):
         return losses.calculate_multiquestion_loss(labels, preds, self.schema.question_index_groups)
 
-    def train_epoch(self, train_source_iter: ForeverDataIterator, train_target_iter: ForeverDataIterator,
+    def train_epoch(self, train_source_loader, train_target_loader,
                     domain_adv: ConditionalDomainAdversarialLoss, epoch: int, writer: SummaryWriter):
         self.model.train()
         domain_adv.train()
@@ -238,9 +238,9 @@ class Transfer:
         transfer_losses = []
         kl_losses = []
         # for i in tqdm(range(min(len(train_source_iter), len(train_target_iter))-1)):
-        for i in range(self.config.iters_per_epoch):
-            x_s, labels_s = next(train_source_iter)[:2]
-            x_t, = next(train_target_iter)[:1]
+        for (x_s, labels_s), (x_t, _) in zip(train_source_loader, train_target_loader):
+            # x_s, labels_s = next(train_source_iter)[:2]
+            # x_t, = next(train_target_iter)[:1]
             x_s, x_t, labels_s = x_s.to(self.config.device), x_t.to(self.config.device), labels_s.to(self.config.device)
 
             x = torch.cat((x_s, x_t), dim=0)
@@ -250,7 +250,7 @@ class Transfer:
 
             dirich_loss = torch.mean(self.dirichlet_loss_func(y_s, labels_s))
             transfer_loss = domain_adv(y_s, f_s, y_t, f_t)
-            kl = get_kl_loss(self.model) / self.config.batch_size
+            kl = get_kl_loss(self.model) / self.config.iters_per_epoch
             loss = dirich_loss + transfer_loss * self.config.trade_off + kl
 
             # compute gradient and do SGD step
@@ -285,11 +285,11 @@ class Transfer:
         print("你又来迁移丹辣！")
         os.makedirs(self.config.save_dir + "log/", exist_ok=True)
         writer = SummaryWriter(self.config.save_dir + "log/")
-        train_source_iter = ForeverDataIterator(train_source_loader)
-        train_target_iter = ForeverDataIterator(train_target_loader)
+        # train_source_iter = ForeverDataIterator(train_source_loader)
+        # train_target_iter = ForeverDataIterator(train_target_loader)
         # val_iter = ForeverDataIterator(val_loader)
         for epoch in range(self.config.epochs):
-            train_loss, transfer_loss, train_kl = self.train_epoch(train_source_iter, train_target_iter, domain_adv,
+            train_loss, transfer_loss, train_kl = self.train_epoch(train_source_loader, train_target_loader, domain_adv,
                                                                    epoch, writer)
             print("Epoch: {}, train loss: {:.4f}, train kl: {:.4f}, transfer loss: {:.4f}".format(epoch, train_loss,
                                                                                                   train_kl,
