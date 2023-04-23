@@ -20,7 +20,6 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from models.utils import *
 from transfer.transfer_args import *
 from tllib.modules.grl import WarmStartGradientReverseLayer
-from tqdm import tqdm
 
 
 const_bnn_prior_parameters = {
@@ -234,10 +233,6 @@ class Transfer:
                     domain_adv: ConditionalDomainAdversarialLoss, epoch: int, writer: SummaryWriter):
         self.model.train()
         domain_adv.train()
-        dirich_losses = []
-        transfer_losses = []
-        kl_losses = []
-        # for i in tqdm(range(min(len(train_source_iter), len(train_target_iter))-1)):
         for i in range(self.config.iters_per_epoch):
             x_s, labels_s = next(train_source_iter)[:2]
             x_t, = next(train_target_iter)[:1]
@@ -252,15 +247,13 @@ class Transfer:
             transfer_loss = domain_adv(y_s, f_s, y_t, f_t)
             kl = get_kl_loss(self.model) / self.config.batch_size
             loss = dirich_loss + transfer_loss * self.config.trade_off + kl
+            losses = loss.item() / self.config.batch_size
 
             # compute gradient and do SGD step
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
-            dirich_losses.append(dirich_loss.item())
-            transfer_losses.append(transfer_loss.item())
-            kl_losses.append(kl.item())
-        return np.mean(dirich_losses), np.mean(transfer_losses), np.mean(kl_losses)
+            return dirich_loss.item(), kl.item(), transfer_loss.item()
 
     # def eval(self, val_iter, domain_adv):
     #     eval_loss = 0
@@ -289,7 +282,7 @@ class Transfer:
         train_target_iter = ForeverDataIterator(train_target_loader)
         # val_iter = ForeverDataIterator(val_loader)
         for epoch in range(self.config.epochs):
-            train_loss, transfer_loss, train_kl = self.train_epoch(train_source_iter, train_target_iter, domain_adv,
+            train_loss, train_kl, transfer_loss = self.train_epoch(train_source_iter, train_target_iter, domain_adv,
                                                                    epoch, writer)
             print("Epoch: {}, train loss: {:.4f}, train kl: {:.4f}, transfer loss: {:.4f}".format(epoch, train_loss,
                                                                                                   train_kl,
@@ -358,8 +351,6 @@ class ClassifierBase(nn.Module):
 
     def forward(self, x: torch.Tensor):
         predictions, stn = self.model(x)
-        # print(self.intermediate_output.shape)
-        # print(self.intermediate_output)
         if self.training:
             return predictions, stn, torch.squeeze(self.intermediate_output)
         else:
