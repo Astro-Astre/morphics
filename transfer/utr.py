@@ -63,8 +63,8 @@ def image_test():
 def data_load(args):
     ## prepare data
     dsets = {}  # 数据集
-    dset_loaders = {}   # 数据集dataloader
-    train_bs = args.batch_size # batch_size
+    dset_loaders = {}  # 数据集dataloader
+    train_bs = args.batch_size  # batch_size
     txt_tar = open(args.t_dset_path).readlines()
     txt_test = open(args.test_dset_path).readlines()
 
@@ -127,7 +127,7 @@ from loss import CrossEntropy1
 
 
 def train_target(args):
-    dset_loaders, dsets = data_load(args)   # 加载数据集
+    dset_loaders, dsets = data_load(args)  # 加载数据集
     writer = SummaryWriter(comment=f'image_mttwoset_kl')
     # set base network设置基础网络，给F
     if args.net[0:3] == 'res':
@@ -204,7 +204,7 @@ def train_target(args):
         epoch += 1
         iter_num = 0
         lr_scheduler(optimizer, iter_num=epoch, max_iter=args.max_epoch)
-        while iter_num * args.batch_size < 55388: # 样本总数55388
+        while iter_num * args.batch_size < 55388:  # 样本总数55388
             try:
                 [inputs_test, inputs_testa], label, tar_idx = iter_test.next()
             except:
@@ -530,53 +530,53 @@ def get_list(a, b):
     return tmp
 
 
-def infer_semantics_and_obtain_UTR(loader, netF, netB, netC, netF1, netB1, netC1, args):
+def infer_semantics_and_obtain_UTR(loader, netC, netC1, args):
+    """
+    获取语义，并且计算UTR_I
+    :param loader:
+    :param netC:
+    :param netC1:
+    :param args:
+    :return:
+    """
     # 基于多个神经网络（netF, netB, netC, netF1, netB1, netC1）计算测试数据的预测结果，
     # 并对数据进行聚类，为每个样本分配伪标签。
     # 同时，它计算每个样本的不确定性风险（UTR）并将样本分为高风险、低风险和混合风险子集
     start_test = True
+    # 将loader中的数据全部预测出来，并且计算不确定度
     with torch.no_grad():
-        iter_test = iter(loader) # 加载目标数据集
+        iter_test = iter(loader)  # 加载目标数据集
         for _ in range(len(loader)):
             data = iter_test.next()
             inputs = data[0]
-            labels = data[1]
             inputs = inputs.cuda()
-            feas = netB(netF(inputs))
-            feas1 = netB1(netF1(inputs))
-            outputs = netC(feas)
-            outputs1 = netC1(feas1) # 1是网络抖动后的输出
-            if start_test: # 第一次的时候初始化all值
+            feas, outputs = netC(inputs)  # 使用netC计算输出
+            feas1, outputs1 = netC1(inputs)  # 1是网络抖动后的输出
+            if start_test:  # 第一次的时候初始化all值
                 all_fea = feas.float().cpu()
                 all_output = outputs.float().cpu()
                 all_fea1 = feas1.float().cpu()
                 all_output1 = outputs1.float().cpu()
-
-                all_label = labels.float().cpu()
                 start_test = False
             else:
                 all_fea = torch.cat((all_fea, feas.float().cpu()), 0)
                 all_output = torch.cat((all_output, outputs.float().cpu()), 0)
                 all_fea1 = torch.cat((all_fea1, feas1.float().cpu()), 0)
                 all_output1 = torch.cat((all_output1, outputs1.float().cpu()), 0)
-                all_label = torch.cat((all_label, labels.float()), 0)
-    all_output = nn.Softmax(dim=1)(all_output)
-    preval, predict = torch.max(all_output, 1)
-    print('direct_all_accuracy:',
-          torch.sum(torch.squeeze(predict).float() == all_label).item() / float(all_label.size()[0]))
-
+    all_output = MultiSoftmax(all_output)  # 对所有的linear层的输出进行softmax，Morphics中应当用MultiQuestionSoftmax
+    preval, predict = torch.max(all_output, 1)  # 获取最大概率及其对应的类别
+    # 特征结果用于计算不确定风险
+    # 计算不确定性风险（UTR）
     UTR_I = torch.sum((all_fea - all_fea1) * (all_fea - all_fea1), dim=1)
-
-    tc = min((UTR_I.mean()) * 3, UTR_I.max())
-
-    high_risk = torch.nonzero(UTR_I > tc).squeeze().cpu().numpy()
-    low_risk = torch.nonzero(UTR_I <= tc).squeeze().cpu().numpy()
-    # we split low-risk set into two subsets for mixup
+    threshold = min((UTR_I.mean()) * 3, UTR_I.max())  # 计算风险阈值
+    # 根据风险阈值将样本分为高风险和低风险子集
+    high_risk = torch.nonzero(UTR_I > threshold).squeeze().cpu().numpy()
+    low_risk = torch.nonzero(UTR_I <= threshold).squeeze().cpu().numpy()
+    # 将低风险子集进一步分为两个子集，用于混合策略
     set1 = torch.nonzero(preval > 0.9).squeeze().cpu().numpy()
     set2 = torch.nonzero(preval <= 0.9).squeeze().cpu().numpy()
-    mix_set1 = get_list(set1, low_risk) # 低风险且概率>0.9
-
-    mix_set2 = get_list(set2, low_risk) # 低风险且概率<0.9
+    mix_set1 = get_list(set1, low_risk)  # 低风险且概率>0.9
+    mix_set2 = get_list(set2, low_risk)  # 低风险且概率<0.9
     all_list = [i for i in range(all_fea.shape[0])]
     _, predict = torch.max(all_output, 1)
 
@@ -592,63 +592,58 @@ def infer_semantics_and_obtain_UTR(loader, netF, netB, netC, netF1, netB1, netC1
     least_num_per_class = 100
     clu_sample = all_list
 
-    final_label = predict
-    all_fea = all_fea[clu_sample]
-    all_output = all_output[clu_sample]
-    predict = predict[clu_sample]
+    final_label = predict  # 将所有样本索引赋值给clu_sample
+    all_fea = all_fea[clu_sample]  # 初始化最终标签为预测标签
+    all_output = all_output[clu_sample]  # 从all_fea中提取clu_sample对应的特征
+    predict = predict[clu_sample]  # 从predict中提取clu_sample对应的预测标签
+    # 当距离度量为余弦相似度时，计算并归一化特征向量
     if args.distance == 'cosine':
         all_fea = torch.cat((all_fea, torch.ones(all_fea.size(0), 1)), 1)
         all_fea = (all_fea.t() / torch.norm(all_fea, p=2, dim=1)).t()
 
     all_fea = all_fea.float().cpu().numpy()
-    K = all_output.size(1)
-    aff = all_output.float().cpu().numpy()
-    initc = aff.transpose().dot(all_fea)
-    initc = initc / (1e-8 + aff.sum(axis=0)[:, None])
-    cls_count = np.eye(K)[predict].sum(axis=0)
-    labelset = np.where(cls_count >= args.threshold)
+    K = all_output.size(1)  # 输出的类别数
+    aff = all_output.float().cpu().numpy()  # 提取概率分布
+    initc = aff.transpose().dot(all_fea)  # 初始化类中心
+    initc = initc / (1e-8 + aff.sum(axis=0)[:, None])  # 归一化类中心
+    cls_count = np.eye(K)[predict].sum(axis=0)  # 计算每个类别的样本数
+    labelset = np.where(cls_count >= args.threshold)  # 找到样本数大于阈值的类别
     labelset = labelset[0]
 
-    dd = cdist(all_fea, initc[labelset], args.distance)
+    dd = cdist(all_fea, initc[labelset], args.distance)  # 计算距离矩阵
 
-    least_num_dict = {}
+    least_num_dict = {}  # 初始化最少样本字典
 
-    classes_set = list(range(12))
-    pred_label = dd.argmin(axis=1)
-    pred_label = labelset[pred_label]
+    classes_set = list(range(12))  # 类别集合列表
+    pred_label = dd.argmin(axis=1)  # 获取距离最小的类别索引
+    pred_label = labelset[pred_label]  # 获取对应的类别标签
 
     for round in range(1):
-        aff = np.eye(K)[pred_label]
-        initc = aff.transpose().dot(all_fea)
-        initc = initc / (1e-8 + aff.sum(axis=0)[:, None])
-        dd = cdist(all_fea, initc[labelset], args.distance)
-        pred_label = dd.argmin(axis=1)
-        pred_label = labelset[pred_label]
-    random.shuffle(classes_set)
+        aff = np.eye(K)[pred_label]  # 为预测标签创建独热编码矩阵
+        initc = aff.transpose().dot(all_fea)  # 更新类中心
+        initc = initc / (1e-8 + aff.sum(axis=0)[:, None])  # 归一化类中心
+        dd = cdist(all_fea, initc[labelset], args.distance)  # 计算新的距离矩阵
+        pred_label = dd.argmin(axis=1)  # 获取距离最小的类别索引
+        pred_label = labelset[pred_label]  # 获取对应的类别标签
+    random.shuffle(classes_set)  # 随机打乱类别集合
     for i in classes_set:
-        sample = np.argsort(dd[:, i])
-        sample = sample[:least_num_per_class]
+        sample = np.argsort(dd[:, i])  # 对距离进行排序
+        sample = sample[:least_num_per_class]  # 选择每个类别的前least_num_per_class个样本
         if i not in least_num_dict.keys():
-            least_num_dict[i] = []
+            least_num_dict[i] = []  # 如果字典中没有这个类别，就添加一个空列表
         for idx, ix in enumerate(sample):
-            least_num_dict[i].append(clu_sample[ix])
-    acc = np.sum(pred_label == all_label[clu_sample].float().numpy()) / len(all_fea)
-    log_str = 'clust Accuracy ={:.2f}%'.format(acc * 100)
+            least_num_dict[i].append(clu_sample[ix])  # 将样本添加到对应类别的列表中
 
-    args.out_file.write(log_str + '\n')
-    args.out_file.flush()
-    print(log_str)
-
-    least_num_per_class_idx = []
+    least_num_per_class_idx = []  # 初始化最少样本数索引列表
     for i, j in enumerate(mix_set1):
         final_label[j] = mix_set1_label[i]
 
     for key, val in least_num_dict.items():
         for i, j in enumerate(val):
             if j not in least_num_per_class_idx:
-                least_num_per_class_idx.append(j)
+                least_num_per_class_idx.append(j)  # 将样本索引添加到最少样本数索引列表中
 
-                final_label[j] = key
+                final_label[j] = key  # 为最少样本数索引列表中的样本分配类别
 
     final_label = final_label.cuda()
 
