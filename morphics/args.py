@@ -4,10 +4,10 @@ import torchvision.transforms as transforms
 def get_data_config():
     return {
         'root': "/data/public/renhaoye/morphics/",
-        'save_dir': "/data/public/renhaoye/morphics/pth_stn/",
+        'save_dir': "/data/public/renhaoye/morphics/pth_stn_atf/",
         'catalog_loc': "/data/renhaoye/mw_catalog.csv",
-        'train_file': "/data/public/renhaoye/morphics/dataset/train.txt",
-        'valid_file': "/data/public/renhaoye/morphics/dataset/valid.txt",
+        'train_file': "/data/public/renhaoye/morphics/dataset/train_raw.txt",
+        'valid_file': "/data/public/renhaoye/morphics/dataset/valid_raw.txt",
         'model_architecture': "efficientnetv2_s",
         'epochs': 1000,
         'batch_size': 128,
