@@ -55,9 +55,9 @@ class Morphics(nn.Module):
         theta = self.fc_loc(xs)
         scale_translation_theta = torch.zeros([theta.shape[0], 6])
         scale_translation_theta[:, 0] = theta[:, 0]  # scale_x
-        scale_translation_theta[:, 4] = theta[:, 1]  # scale_y
+        scale_translation_theta[:, 4] = theta[:, 4]  # scale_y
         scale_translation_theta[:, 2] = theta[:, 2]  # translation_x
-        scale_translation_theta[:, 5] = theta[:, 3]  # translation_y
+        scale_translation_theta[:, 5] = theta[:, 5]  # translation_y
 
         theta = theta.view(-1, 2, 3)
         grid = F.affine_grid(theta, x.size(), align_corners=True)
