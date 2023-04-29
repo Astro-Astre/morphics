@@ -37,7 +37,7 @@ class Morphics(nn.Module):
         # Fully-connected regression network predicrs the parameters
         # necessary for an attention tracking transformation
         self.fc_loc = nn.Sequential(
-            nn.Linear(self.fc_in_size, 32), nn.ReLU(), nn.Linear(32, 4)
+            nn.Linear(self.fc_in_size, 32), nn.ReLU(), nn.Linear(32, 6)
         )
 
         # Initialize the weights/bias with identity transformation
@@ -53,7 +53,7 @@ class Morphics(nn.Module):
         xs = self.localization(x)
         xs = xs.view(-1, self.fc_in_size)
         theta = self.fc_loc(xs)
-        scale_translation_theta = torch.zeros_like(theta)
+        scale_translation_theta = torch.zeros([theta.shape[0], 6])
         scale_translation_theta[:, 0] = theta[:, 0]  # scale_x
         scale_translation_theta[:, 4] = theta[:, 1]  # scale_y
         scale_translation_theta[:, 2] = theta[:, 2]  # translation_x
