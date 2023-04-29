@@ -145,13 +145,13 @@ def main(config):
     subset_indices = list(range(subset_size))
 
     train_data = GalaxyDataset(annotations_file=config.train_file, transform=config.transfer)
-    train_data = Subset(train_data, subset_indices)
+    # train_data = Subset(train_data, subset_indices)
     train_loader = DataLoader(dataset=train_data, batch_size=config.batch_size,
                               shuffle=True, num_workers=config.WORKERS, pin_memory=True)
 
     valid_data = GalaxyDataset(annotations_file=config.valid_file,
                                transform=transforms.Compose([transforms.ToTensor()]), )
-    valid_data = Subset(valid_data, subset_indices)
+    # valid_data = Subset(valid_data, subset_indices)
     valid_loader = DataLoader(dataset=valid_data, batch_size=config.batch_size,
                               shuffle=True, num_workers=config.WORKERS, pin_memory=True)
     device_ids = [1]
