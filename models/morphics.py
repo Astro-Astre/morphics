@@ -40,7 +40,7 @@ def apply_function_to_image(linear_output, input_image):
     output_image = torch.zeros_like(input_image)
     for b in range(batch_size):
         for c in range(channels):
-            group_points = points[b][c * 2:(c * 2) + 12]
+            group_points = points[b][c * 2:(c * 2) + 120]
             y = nonlinear_function(x, group_points).unsqueeze(1)
             output_image[b, c] = input_image[b, c] * y
     return output_image
@@ -81,7 +81,7 @@ class Morphics(nn.Module):
             nn.Linear(self.fc_in_size, 32), nn.ReLU(), nn.Linear(32, 6)
         )
         self.atf = nn.Sequential(
-            nn.Linear(self.fc_in_size, 32, bias=True), nn.ReLU(), nn.Linear(32, 60, bias=True)
+            nn.Linear(self.fc_in_size, 32, bias=True), nn.ReLU(), nn.Linear(32, 120, bias=True)
         )
         # self.sigmoid = nn.Sigmoid()
         nn.init.uniform_(self.atf[-1].weight, a=0, b=1)
