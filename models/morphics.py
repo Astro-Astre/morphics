@@ -2,23 +2,23 @@ import torch.nn as nn
 import torch
 import torch.nn.functional as F
 import numpy as np
-
+from astropy.io import fits
 
 def get_output_shape(model, image_dim):
     """Get output shape of a PyTorch model or layer"""
     return model(torch.rand(*(image_dim))).data.shape
 
 
-# 将Linear输出转换为12个点的集合
+
 def convert_to_points(linear_output):
     points = []
     for b in range(linear_output.size(0)):
         batch_points = []
         for i in range(0, linear_output.size(1), linear_output.size(1) // 6):
-            batch_points.append(torch.tensor([0, 0], dtype=torch.float32, device=linear_output.device))
+            # batch_points.append(torch.tensor([0., 0.], dtype=torch.float32, device=linear_output.device))
             batch_points += [linear_output[b, i:i + 2], linear_output[b, i + 2:i + 4], linear_output[b, i + 4:i + 6],
                              linear_output[b, i + 6:i + 8], linear_output[b, i + 8:i + 10]]
-            batch_points.append(torch.tensor([1, 1], dtype=torch.float32, device=linear_output.device))
+            # batch_points.append(torch.tensor([1., 1.], dtype=torch.float32, device=linear_output.device))
         points.append(torch.stack(batch_points))
     return torch.stack(points)
 
@@ -58,6 +58,14 @@ class Morphics(nn.Module):
             nn.MaxPool2d(3, stride=2),
             nn.ReLU(),
         )
+        self.localization1 = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=11),
+            nn.MaxPool2d(3, stride=2),
+            nn.ReLU(),
+            nn.Conv2d(64, 96, kernel_size=9),
+            nn.MaxPool2d(3, stride=2),
+            nn.ReLU(),
+        )
         self.channels = 3
         self.cutout_size = 256
         self.expected_input_shape = (
@@ -75,34 +83,35 @@ class Morphics(nn.Module):
         self.atf = nn.Sequential(
             nn.Linear(self.fc_in_size, 32, bias=True), nn.ReLU(), nn.Linear(32, 60, bias=True)
         )
-        self.sigmoid = nn.Sigmoid()
+        # self.sigmoid = nn.Sigmoid()
         nn.init.uniform_(self.atf[-1].weight, a=0, b=1)
         nn.init.uniform_(self.atf[-1].bias, a=0, b=1)
         self.fc_loc[2].weight.data.zero_()
         ident = [1, 0, 0, 0, 1, 0]
         self.fc_loc[2].bias.data.copy_(torch.tensor(ident, dtype=torch.float))
 
-        self.maxpool = nn.AvgPool2d(4, stride=4)
+        # self.maxpool = nn.AvgPool2d(2, stride=2)
 
     def spatial_transform(self, x):
-        # device = x.device
+        device = x.device
         xs = self.localization(x)
         xs = xs.view(-1, self.fc_in_size)
         theta = self.fc_loc(xs)
-        # scale_translation_theta = torch.zeros([theta.shape[0], 6])
-        # scale_translation_theta[:, 0] = theta[:, 0]  # scale_x
-        # scale_translation_theta[:, 4] = theta[:, 4]  # scale_y
-        # scale_translation_theta[:, 2] = theta[:, 2]  # translation_x
-        # scale_translation_theta[:, 5] = theta[:, 5]  # translation_y
+        scale_translation_theta = torch.zeros([theta.shape[0], 6])
+        scale_translation_theta[:, 0] = theta[:, 0]  # scale_x
+        scale_translation_theta[:, 4] = theta[:, 4]  # scale_y
+        scale_translation_theta[:, 2] = theta[:, 2]  # translation_x
+        scale_translation_theta[:, 5] = theta[:, 5]  # translation_y
 
-        # theta = scale_translation_theta.view(-1, 2, 3).to(device)
+        theta = scale_translation_theta.view(-1, 2, 3).to(device)
         theta = theta.view(-1, 2, 3)
         grid = F.affine_grid(theta, x.size(), align_corners=True)
         x = F.grid_sample(x, grid, align_corners=True)
+        # x = self.maxpool(x)
         return x
 
     def auto_stretch(self, x):
-        x = self.localization(x)
+        x = self.localization1(x)
         x = x.view(-1, self.fc_in_size)
         atf = self.atf(x)
         # atf = self.sigmoid(atf)
@@ -110,9 +119,9 @@ class Morphics(nn.Module):
         return atf
 
     def forward(self, x):
-        stn = self.spatial_transform(x)
-        # atf = self.auto_stretch(stn)
-        # stned = apply_function_to_image(atf, stn)
-        stn = self.maxpool(stn)
+        atf = self.auto_stretch(x)
+        atfed = apply_function_to_image(atf, x)
+        stn = self.spatial_transform(atfed)
+        fits.writeto(f'/data/public/renhaoye/2.fits', stn[0].cpu().detach().numpy(), overwrite=True)
         x = self.model(stn)
         return x, stn

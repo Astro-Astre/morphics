@@ -45,11 +45,11 @@ class GalaxyDataset(Dataset):
     def __getitem__(self, index):
         path, label = self.imgs[index]
         img = load_img(path)
-        # min_per_channel = img.min(axis=(1, 2), keepdims=True)
-        # max_per_channel = img.max(axis=(1, 2), keepdims=True)
-        # normalized_image_array = (img - min_per_channel) / (max_per_channel - min_per_channel)
-        # return np.nan_to_num(normalized_image_array), np.array(label)
-        return np.nan_to_num(img), np.array(label)
+        min_per_channel = img.min(axis=(1, 2), keepdims=True)
+        max_per_channel = img.max(axis=(1, 2), keepdims=True)
+        normalized_image_array = (img - min_per_channel) / (max_per_channel - min_per_channel)
+        return np.nan_to_num(normalized_image_array), np.array(label)
+        # return np.nan_to_num(img), np.array(label)
 
     def __len__(self):
         return len(self.imgs)

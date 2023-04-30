@@ -141,7 +141,7 @@ def main(config):
     dnn_to_bnn(model, const_bnn_prior_parameters)
     model = Morphics(model)
     model = model.to("cuda:1")
-    subset_size = 1000
+    subset_size = 10000
     subset_indices = list(range(subset_size))
 
     train_data = GalaxyDataset(annotations_file=config.train_file, transform=config.transfer)
