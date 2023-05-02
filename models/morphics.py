@@ -1,49 +1,44 @@
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
-import numpy as np
 from astropy.io import fits
+
 
 def get_output_shape(model, image_dim):
     """Get output shape of a PyTorch model or layer"""
     return model(torch.rand(*(image_dim))).data.shape
 
 
+def rescale_image(input_tensor: torch.Tensor, shadow_clip, highlight_clip) -> torch.Tensor:
+    device = input_tensor.device
 
-def convert_to_points(linear_output):
-    points = []
-    for b in range(linear_output.size(0)):
-        batch_points = []
-        for i in range(0, linear_output.size(1), linear_output.size(1) // 6):
-            # batch_points.append(torch.tensor([0., 0.], dtype=torch.float32, device=linear_output.device))
-            batch_points += [linear_output[b, i:i + 2], linear_output[b, i + 2:i + 4], linear_output[b, i + 4:i + 6],
-                             linear_output[b, i + 6:i + 8], linear_output[b, i + 8:i + 10]]
-            # batch_points.append(torch.tensor([1., 1.], dtype=torch.float32, device=linear_output.device))
-        points.append(torch.stack(batch_points))
-    return torch.stack(points)
+    # 线性缩放到 [shadow_clip, highlight_clip] 区间
+    rescaled_tensor = (input_tensor - shadow_clip) / (highlight_clip - shadow_clip)
 
+    # 将低于阴影裁剪点的像素值设置为 0（黑色），高于高光裁剪点的像素值设置为 1（白色）
+    rescaled_tensor = torch.where(input_tensor < shadow_clip, torch.tensor(0.0).to(device), rescaled_tensor)
+    rescaled_tensor = torch.where(input_tensor > highlight_clip, torch.tensor(1.0).to(device), rescaled_tensor)
 
-# 定义非线性拟合函数
-def nonlinear_function(x, points, degree=3):
-    points = points.cpu().detach().numpy()
-    coeff_x = np.polyfit(points[:, 0], points[:, 1], degree)
-    f_x = np.polyval(coeff_x, x.cpu().numpy())
-    f_x = np.clip(f_x, 0, 1)
-    return torch.tensor(f_x, dtype=torch.float32, device=x.device)
+    return rescaled_tensor
 
+def mtf(img, mtf_m):
+    assert img.shape == (img.shape[0], img.shape[1], img.shape[2], img.shape[3]), "Input must have shape (B, C, H, W)"
+    assert mtf_m.shape == (img.shape[0], 6), "MTF matrix must have shape (B, 6)"
 
-def apply_function_to_image(linear_output, input_image):
-    batch_size, channels, height, width = input_image.size()
-    points = convert_to_points(linear_output)
+    black, midtone = mtf_m[:, :3], mtf_m[:, 3:]
+    white = torch.ones_like(black)
+    if isinstance(img, torch.Tensor):
+        assert torch.all(black < white), "Threshold values must satisfy black < midtone < white for each channel"
+        device = img.device
+        black, midtone, white = black.to(device).unsqueeze(2).unsqueeze(3), midtone.to(device).unsqueeze(2).unsqueeze(
+            3), white.to(device).unsqueeze(2).unsqueeze(3)
+        result = rescale_image(img, black, white)
+        result = (midtone - 1) * result / ((2 * midtone - 1) * result - midtone)
 
-    x = torch.linspace(0, 1, width).unsqueeze(0).unsqueeze(0).unsqueeze(0).to(input_image.device)
-    output_image = torch.zeros_like(input_image)
-    for b in range(batch_size):
-        for c in range(channels):
-            group_points = points[b][c * 2:(c * 2) + 120]
-            y = nonlinear_function(x, group_points).unsqueeze(1)
-            output_image[b, c] = input_image[b, c] * y
-    return output_image
+    else:
+        raise ValueError("Input must be either NumPy array or PyTorch tensor")
+
+    return result
 
 
 class Morphics(nn.Module):
@@ -81,29 +76,26 @@ class Morphics(nn.Module):
             nn.Linear(self.fc_in_size, 32), nn.ReLU(), nn.Linear(32, 6)
         )
         self.atf = nn.Sequential(
-            nn.Linear(self.fc_in_size, 32, bias=True), nn.ReLU(), nn.Linear(32, 120, bias=True)
+            nn.Linear(self.fc_in_size, 32, bias=True), nn.ReLU(), nn.Linear(32, 6, bias=True),
         )
-        # self.sigmoid = nn.Sigmoid()
-        nn.init.uniform_(self.atf[-1].weight, a=0, b=1)
-        nn.init.uniform_(self.atf[-1].bias, a=0, b=1)
+        nn.init.normal_(self.atf[-1].weight, mean=0.1, std=0.1)
+        nn.init.normal_(self.atf[-1].bias, mean=0.1, std=0.1)
         self.fc_loc[2].weight.data.zero_()
         ident = [1, 0, 0, 0, 1, 0]
         self.fc_loc[2].bias.data.copy_(torch.tensor(ident, dtype=torch.float))
 
-        # self.maxpool = nn.AvgPool2d(2, stride=2)
-
     def spatial_transform(self, x):
-        device = x.device
+        # device = x.device
         xs = self.localization(x)
         xs = xs.view(-1, self.fc_in_size)
         theta = self.fc_loc(xs)
-        scale_translation_theta = torch.zeros([theta.shape[0], 6])
-        scale_translation_theta[:, 0] = theta[:, 0]  # scale_x
-        scale_translation_theta[:, 4] = theta[:, 4]  # scale_y
-        scale_translation_theta[:, 2] = theta[:, 2]  # translation_x
-        scale_translation_theta[:, 5] = theta[:, 5]  # translation_y
+        # scale_translation_theta = torch.zeros([theta.shape[0], 6])
+        # scale_translation_theta[:, 0] = theta[:, 0]  # scale_x
+        # scale_translation_theta[:, 4] = theta[:, 4]  # scale_y
+        # scale_translation_theta[:, 2] = theta[:, 1]  # translation_x
+        # scale_translation_theta[:, 5] = theta[:, 3]  # translation_y
 
-        theta = scale_translation_theta.view(-1, 2, 3).to(device)
+        # theta = scale_translation_theta.view(-1, 2, 3).to(device)
         theta = theta.view(-1, 2, 3)
         grid = F.affine_grid(theta, x.size(), align_corners=True)
         x = F.grid_sample(x, grid, align_corners=True)
@@ -115,13 +107,16 @@ class Morphics(nn.Module):
         x = x.view(-1, self.fc_in_size)
         atf = self.atf(x)
         # atf = self.sigmoid(atf)
-        atf = atf.view(-1, 60)
-        return atf
+        black = 0.1 * torch.sigmoid(atf[:, :3])
+        midtone = black + 0.4 * torch.sigmoid(atf[:, 3:6])
+        out = torch.cat([black, midtone], dim=1)
+        return out
 
     def forward(self, x):
-        atf = self.auto_stretch(x)
-        atfed = apply_function_to_image(atf, x)
-        stn = self.spatial_transform(atfed)
-        fits.writeto(f'/data/public/renhaoye/2.fits', stn[0].cpu().detach().numpy(), overwrite=True)
-        x = self.model(stn)
-        return x, stn
+        stn = self.spatial_transform(x)
+        atf = self.auto_stretch(stn)
+        atfed = mtf(stn, atf)
+        # stn = self.spatial_transform(atfed)
+        fits.writeto(f'/data/public/renhaoye/2.fits', atfed[0].cpu().detach().numpy(), overwrite=True)
+        x = self.model(atfed)
+        return x, atfed
