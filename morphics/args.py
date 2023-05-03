@@ -21,7 +21,7 @@ def get_data_config():
             transforms.RandomAffine(degrees=30, translate=(0.1, 0.1), scale=(0.9, 1.1), shear=(-10, 10)),
             transforms.ToTensor(),
         ]),
-        'lr': 0.0001,
+        'lr': 0.00001,
         'betas': (0.9, 0.999),
         'phase': "train",
         'sample': 1,

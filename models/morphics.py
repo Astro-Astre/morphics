@@ -113,10 +113,9 @@ class Morphics(nn.Module):
         return out
 
     def forward(self, x):
-        stn = self.spatial_transform(x)
-        atf = self.auto_stretch(stn)
-        atfed = mtf(stn, atf)
-        # stn = self.spatial_transform(atfed)
-        fits.writeto(f'/data/public/renhaoye/2.fits', atfed[0].cpu().detach().numpy(), overwrite=True)
-        x = self.model(atfed)
-        return x, atfed
+        atf = self.auto_stretch(x)
+        atfed = mtf(x, atf)
+        stn = self.spatial_transform(atfed)
+        fits.writeto(f'/data/public/renhaoye/2.fits', stn[0].cpu().detach().numpy(), overwrite=True)
+        x = self.model(stn)
+        return x, stn
