@@ -191,12 +191,7 @@ def train_target(args):
     optimizer = op_copy(optimizer)
 
     print(len(dsets["target"]))
-
-    iter_num = 0
-
-    start = True
     epoch = 0
-
 
     while epoch < args.max_epoch:
         astre.eval()
@@ -214,29 +209,18 @@ def train_target(args):
 
         mix_set1 = list(set(mix_set1) | set(least_num_per_class_idx))
 
-        dset_all = Listset(dsets["target"], all_list)
-        dset_all = DataLoader(dset_all, batch_size=args.batch_size, shuffle=True, drop_last=True)
         iter_num = 0
         while (iter_num * (args.batch_size // 4)) < max(len(mix_set2), len(mix_set1)):
             iter_num += 1
 
             if len(mix_set1) != 0 and len(mix_set2) != 0:
-                try:
-                    [inputs_test, inputs_testa], label, tar_idx = iter_set1.next()
-                except:
-                    dset_mix_set1 = Listset(dsets["target"], mix_set1)
-                    dloader_mix_set1 = DataLoader(dset_mix_set1, batch_size=args.batch_size // 4, shuffle=True,
-                                                  drop_last=True)
-                    iter_set1 = iter(dloader_mix_set1)
-                    [inputs_test, inputs_testa], label, tar_idx = iter_set1.next()
-                try:
-                    [inputs_testu, inputs_testua], labelu, tar_idxu = iter_set2.next()
-                except:
-                    dset_mix_set2 = Listset(dsets["target"], mix_set2)
-                    dloader_mix_set2 = DataLoader(dset_mix_set2, batch_size=args.batch_size // 4, shuffle=True,
-                                                  drop_last=True)
-                    iter_set2 = iter(dloader_mix_set2)
-                    [inputs_testu, inputs_testua], labelu, tar_idxu = iter_set2.next()
+                # 对mix_set1和mix_set2进行预测
+                target_mix_set1_loader = DataLoader(dset_mix_target_set1, batch_size=args.batch_size // 4, shuffle=True,
+                                                    num_workers=args.worker, drop_last=True)
+                target_mix_set2_loader = DataLoader(dset_mix_target_set2, batch_size=args.batch_size // 4, shuffle=True,
+                                                    num_workers=args.worker, drop_last=True)
+                [inputs_test, inputs_testa], label, tar_idx = iter_set2.next()
+                [inputs_testu, inputs_testua], labelu, tar_idxu = iter_set2.next()
 
                 if inputs_test.size(0) > 1 and inputs_testu.size(0) > 1:
                     optimizer.zero_grad()
@@ -245,8 +229,8 @@ def train_target(args):
                     inputs_testua = inputs_testua.cuda()
 
                     with torch.no_grad():
-                        pred_u = netC(netB(netF(inputs_testu)))
-                        pred_u = nn.Softmax(dim=1)(pred_u)
+                        pred_u, _ = astre(inputs_testu)
+                        pred_u = MultiSoftmax(pred_u)
 
                         pred_u = pred_u ** (1 / 0.5)
                         targets_u = pred_u / pred_u.sum(dim=1, keepdim=True)
@@ -292,13 +276,6 @@ def train_target(args):
                         hplcloss.backward()
 
                         optimizer.step()
-
-        pre = copy.deepcopy(netFS.state_dict())
-        netFS1 = capture_unc(pre, netFS1)
-        pre = copy.deepcopy(netF.state_dict())
-        netF1 = capture_unc(pre, netF1)
-        pre = copy.deepcopy(netB.state_dict())
-        netB1 = capture_unc(pre, netB1)
 
         iter_num = 0
         while iter_hphc_num1 * (args.batch_size // 4) < len(high_risk) or iter_num * args.batch_size < len(all_list):
@@ -369,10 +346,8 @@ def train_target(args):
                     outputs_test = netC(features_test)
 
                     with torch.no_grad():
-
-                        features_testS1 = (netBS1(netFS1(inputs_test)))
-                        features_testS = (netBS(netFS(inputs_test)))
-                        UTR_D = 1 / 4 * get_mean(features_testS1, features_testS).cuda()
+                        features_testS = astreS(inputs_testa)
+                        UTR_D = 1 / 4 * distributional_uncertainty.cuda()
                     kdloss = torch.nn.MSELoss(reduce=False, size_average=False)(features_test,
                                                                                 features_testS)  # nn.KLDivLoss(reduction='none')((features_test).log() ,features_testS )*10
 
@@ -382,9 +357,6 @@ def train_target(args):
                     if args.ent:
                         softmax_out = nn.Softmax(dim=1)(outputs_test)
                         entropy_loss = torch.mean(loss.Entropy(softmax_out))
-                        if args.gent:
-                            msoftmax = softmax_out.mean(dim=0)
-                            entropy_loss -= torch.sum(-msoftmax * torch.log(msoftmax + 1e-5))
 
                         im_loss = entropy_loss * args.ent_par
 
@@ -514,7 +486,7 @@ def infer_semantics_and_obtain_UTR(loader, netC, args):
     set2 = torch.nonzero(preval <= 0.9).squeeze().cpu().numpy()
     mix_set1 = get_list(set1, low_risk)  # 低风险且概率>0.9
     mix_set2 = get_list(set2, low_risk)  # 低风险且概率<0.9
-    all_list = [i for i in range(all_fea.shape[0])] # 所有样本的索引
+    all_list = [i for i in range(all_fea.shape[0])]  # 所有样本的索引
     print("UTR_I:", UTR_I.mean())
 
     high_risk = get_list(high_risk, high_risk)
