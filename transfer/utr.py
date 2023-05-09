@@ -128,7 +128,6 @@ from loss import CrossEntropy1
 
 def train_target(args):
     dset_loaders, dsets = data_load(args)  # 加载数据集
-    writer = SummaryWriter(comment=f'image_mttwoset_kl')
     # set base network设置基础网络，给F
     if args.net[0:3] == 'res':
         netF = network.ResBase(res_name=args.net).cuda()
@@ -136,11 +135,9 @@ def train_target(args):
         netFS = network.ResBase(res_name=args.net).cuda()
         netFS1 = network.ResBase(res_name=args.net).cuda()
         netF_f = network.ResBase(res_name=args.net).cuda()
-    elif args.net[0:3] == 'vgg':
-        netF = network.VGGBase(vgg_name=args.net).cuda()
-        netF1 = network.VGGBase(vgg_name=args.net).cuda()
     # 创建一个瓶颈层，将特征维度从feature_dim降至bottleneck_dim。
     # 在前向传播中，输入通过一个线性层、可选的批量归一化层，以及ReLU激活函数
+    astre = torch.load(model_path)
     netB = network.feat_bootleneck(type=args.classifier, feature_dim=netF.in_features,
                                    bottleneck_dim=args.bottleneck).cuda()
     netB1 = network.feat_bootleneck(type=args.classifier, feature_dim=netF.in_features,
@@ -200,64 +197,18 @@ def train_target(args):
     start = True
     epoch = 0
 
-    while epoch < 8:
-        epoch += 1
-        iter_num = 0
-        lr_scheduler(optimizer, iter_num=epoch, max_iter=args.max_epoch)
-        while iter_num * args.batch_size < 55388:  # 样本总数55388
-            try:
-                [inputs_test, inputs_testa], label, tar_idx = iter_test.next()
-            except:
-                all_list = range(55388)
-
-                dset_all = Listset(dsets["target"], all_list)
-                dset_all = DataLoader(dset_all, batch_size=args.batch_size, shuffle=True, drop_last=True)
-                iter_test = iter(dset_all)
-                [inputs_test, inputs_testa], label, tar_idx = iter_test.next()
-
-            if inputs_test.size(0) == 1:
-                continue
-
-            inputs_test = inputs_test.cuda()
-            iter_num += 1
-
-            features_test = netB(netF(inputs_test))
-            outputs_test = netC(features_test)
-
-            if args.ent:
-                softmax_out = nn.Softmax(dim=1)(outputs_test)
-                entropy_loss = torch.mean(loss.Entropy(softmax_out))
-                if args.gent:
-                    msoftmax = softmax_out.mean(dim=0)
-                    gentropy_loss = torch.sum(-msoftmax * torch.log(msoftmax + args.epsilon))
-                    entropy_loss -= gentropy_loss
-                im_loss = entropy_loss * args.ent_par
-
-            optimizer.zero_grad()
-            im_loss.backward()
-            optimizer.step()
 
     while epoch < args.max_epoch:
-        netF.eval()
-        netB.eval()
-        netC.eval()
-        netF1.eval()
-        netB1.eval()
-        netC1.eval()
+        astre.eval()
         lr_scheduler(optimizer, iter_num=epoch, max_iter=args.max_epoch)
         pre = copy.deepcopy(netF.state_dict())
-        netF1 = capture_unc(pre, netF1)
 
         mem_label, mix_set1, mix_set2, high_risk, least_num_per_class_idx, all_list = infer_semantics_and_obtain_UTR(
-            dset_loaders['test'], netF, netB, netC, netF1, netB1, netC1, args)
-
-        netF1.load_state_dict(netF.state_dict())
+            dset_loaders['test'], astre, args)
 
         mem_label = mem_label.cuda()
 
-        netF.train()
-        netB.train()
-        netC.train()
+        astre.train()
 
         iter_hphc_num1 = 0
 
@@ -447,18 +398,9 @@ def train_target(args):
                     optimizer.step()
 
         epoch += 2
-        netC.eval()
-        if args.dset == 'VISDA-C':
-            acc_s_te, acc_list = cal_acc(dset_loaders['test'], netF, netB, netC, True)
-            log_str = 'Task: {}, Iter:{}/{}; Accuracy = {:.2f}%'.format(args.name, epoch, args.max_epoch,
-                                                                        acc_s_te) + '\n' + acc_list
-        else:
-            acc_s_te, _ = cal_acc(dset_loaders['test'], netF, netB, netC, False)
-            log_str = 'Task: {}, Iter:{}/{}; Accuracy = {:.2f}%'.format(args.name, epoch, args.max_epoch, acc_s_te)
-
-        args.out_file.write(log_str + '\n')
-        if args.issave:
-            torch.save(netC.state_dict(), osp.join(args.output_dir, "target_C_" + str(epoch) + ".pt"))
+        astre.eval()
+        # TODO:计算准确度
+        # TODO:保存模型
 
     return netC
 
@@ -530,7 +472,7 @@ def get_list(a, b):
     return tmp
 
 
-def infer_semantics_and_obtain_UTR(loader, netC, netC1, args):
+def infer_semantics_and_obtain_UTR(loader, netC, args):
     """
     获取语义，并且计算UTR_I
     :param loader:
@@ -550,36 +492,29 @@ def infer_semantics_and_obtain_UTR(loader, netC, netC1, args):
             data = iter_test.next()
             inputs = data[0]
             inputs = inputs.cuda()
-            feas, outputs = netC(inputs)  # 使用netC计算输出
-            feas1, outputs1 = netC1(inputs)  # 1是网络抖动后的输出
+            feas, outputs = netC(inputs)  # 使用netC计算输出, feature是卷积层出来时候展平的特征？
             if start_test:  # 第一次的时候初始化all值
                 all_fea = feas.float().cpu()
                 all_output = outputs.float().cpu()
-                all_fea1 = feas1.float().cpu()
-                all_output1 = outputs1.float().cpu()
                 start_test = False
             else:
                 all_fea = torch.cat((all_fea, feas.float().cpu()), 0)
                 all_output = torch.cat((all_output, outputs.float().cpu()), 0)
-                all_fea1 = torch.cat((all_fea1, feas1.float().cpu()), 0)
-                all_output1 = torch.cat((all_output1, outputs1.float().cpu()), 0)
     all_output = MultiSoftmax(all_output)  # 对所有的linear层的输出进行softmax，Morphics中应当用MultiQuestionSoftmax
     preval, predict = torch.max(all_output, 1)  # 获取最大概率及其对应的类别
     # 特征结果用于计算不确定风险
     # 计算不确定性风险（UTR）
-    UTR_I = torch.sum((all_fea - all_fea1) * (all_fea - all_fea1), dim=1)
+    UTR_I = distributional_uncertainty(all_output)  # 计算分布不确定度
     threshold = min((UTR_I.mean()) * 3, UTR_I.max())  # 计算风险阈值
     # 根据风险阈值将样本分为高风险和低风险子集
     high_risk = torch.nonzero(UTR_I > threshold).squeeze().cpu().numpy()
     low_risk = torch.nonzero(UTR_I <= threshold).squeeze().cpu().numpy()
     # 将低风险子集进一步分为两个子集，用于混合策略
-    set1 = torch.nonzero(preval > 0.9).squeeze().cpu().numpy()
+    set1 = torch.nonzero(preval > 0.9).squeeze().cpu().numpy()  # preval是最大概率
     set2 = torch.nonzero(preval <= 0.9).squeeze().cpu().numpy()
     mix_set1 = get_list(set1, low_risk)  # 低风险且概率>0.9
     mix_set2 = get_list(set2, low_risk)  # 低风险且概率<0.9
-    all_list = [i for i in range(all_fea.shape[0])]
-    _, predict = torch.max(all_output, 1)
-
+    all_list = [i for i in range(all_fea.shape[0])] # 所有样本的索引
     print("UTR_I:", UTR_I.mean())
 
     high_risk = get_list(high_risk, high_risk)
