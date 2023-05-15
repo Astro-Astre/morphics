@@ -53,14 +53,14 @@ class Morphics(nn.Module):
             nn.MaxPool2d(3, stride=2),
             nn.ReLU(),
         )
-        self.localization1 = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=11),
-            nn.MaxPool2d(3, stride=2),
-            nn.ReLU(),
-            nn.Conv2d(64, 96, kernel_size=9),
-            nn.MaxPool2d(3, stride=2),
-            nn.ReLU(),
-        )
+        # self.localization1 = nn.Sequential(
+        #     nn.Conv2d(3, 64, kernel_size=11),
+        #     nn.MaxPool2d(3, stride=2),
+        #     nn.ReLU(),
+        #     nn.Conv2d(64, 96, kernel_size=9),
+        #     nn.MaxPool2d(3, stride=2),
+        #     nn.ReLU(),
+        # )
         self.channels = 3
         self.cutout_size = 256
         self.expected_input_shape = (
@@ -75,11 +75,11 @@ class Morphics(nn.Module):
         self.fc_loc = nn.Sequential(
             nn.Linear(self.fc_in_size, 32), nn.ReLU(), nn.Linear(32, 6)
         )
-        self.atf = nn.Sequential(
-            nn.Linear(self.fc_in_size, 32, bias=True), nn.ReLU(), nn.Linear(32, 6, bias=True),
-        )
-        nn.init.normal_(self.atf[-1].weight, mean=0.1, std=0.1)
-        nn.init.normal_(self.atf[-1].bias, mean=0.1, std=0.1)
+        # self.atf = nn.Sequential(
+        #     nn.Linear(self.fc_in_size, 32, bias=True), nn.ReLU(), nn.Linear(32, 6, bias=True),
+        # )
+        # nn.init.normal_(self.atf[-1].weight, mean=0.1, std=0.1)
+        # nn.init.normal_(self.atf[-1].bias, mean=0.1, std=0.1)
         self.fc_loc[2].weight.data.zero_()
         ident = [1, 0, 0, 0, 1, 0]
         self.fc_loc[2].bias.data.copy_(torch.tensor(ident, dtype=torch.float))
@@ -102,20 +102,20 @@ class Morphics(nn.Module):
         # x = self.maxpool(x)
         return x
 
-    def auto_stretch(self, x):
-        x = self.localization1(x)
-        x = x.view(-1, self.fc_in_size)
-        atf = self.atf(x)
-        # atf = self.sigmoid(atf)
-        black = 0.1 * torch.sigmoid(atf[:, :3])
-        midtone = black + 0.4 * torch.sigmoid(atf[:, 3:6])
-        out = torch.cat([black, midtone], dim=1)
-        return out
+    # def auto_stretch(self, x):
+    #     x = self.localization1(x)
+    #     x = x.view(-1, self.fc_in_size)
+    #     atf = self.atf(x)
+    #     # atf = self.sigmoid(atf)
+    #     black = 0.1 * torch.sigmoid(atf[:, :3])
+    #     midtone = black + 0.4 * torch.sigmoid(atf[:, 3:6])
+    #     out = torch.cat([black, midtone], dim=1)
+    #     return out
 
     def forward(self, x):
-        atf = self.auto_stretch(x)
-        atfed = mtf(x, atf)
-        stn = self.spatial_transform(atfed)
-        fits.writeto(f'/data/public/renhaoye/2.fits', stn[0].cpu().detach().numpy(), overwrite=True)
+        # atf = self.auto_stretch(x)
+        # atfed = mtf(x, atf)
+        stn = self.spatial_transform(x)
+        # fits.writeto(f'/data/public/renhaoye/2.fits', stn[0].cpu().detach().numpy(), overwrite=True)
         x = self.model(stn)
         return x, stn
