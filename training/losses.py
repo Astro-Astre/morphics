@@ -2,6 +2,19 @@ import torch
 import pyro
 
 
+def MultiSoftmax(predictions, question_index_groups):
+    q_preds = []
+    for q_n in range(len(question_index_groups)):
+        q_indices = question_index_groups[q_n]
+        q_start = q_indices[0]
+        q_end = q_indices[1]
+        q_pred = torch.softmax(predictions[:, q_start:q_end + 1], dim=1) * 99 + 1
+        q_preds.append(q_pred)
+
+    total_pred = torch.stack(q_preds, axis=0)
+    return total_pred  # leave the reduction to pytorch lightning
+
+
 def calculate_multiquestion_loss(labels, predictions, question_index_groups):
     """
     The full decision tree loss used for training GZ DECaLS models
@@ -19,12 +32,14 @@ def calculate_multiquestion_loss(labels, predictions, question_index_groups):
     """
     # very important that question_index_groups is fixed and discrete, else tf.function autograph will mess up 
     q_losses = []
-    # will give shape errors if model output dim is not labels dim, which can happen if losses.py substrings are missing an answer
+    # will give shape errors if model output dim is not labels dim, which can happen if losses.py substrings are
+    # missing an answer
     for q_n in range(len(question_index_groups)):
         q_indices = question_index_groups[q_n]
         q_start = q_indices[0]
         q_end = q_indices[1]
-        q_loss = dirichlet_loss(labels[:, q_start:q_end + 1], torch.softmax(predictions[:, q_start:q_end + 1], dim=1)*99 + 1)
+        q_loss = dirichlet_loss(labels[:, q_start:q_end + 1],
+                                torch.softmax(predictions[:, q_start:q_end + 1], dim=1) * 99 + 1)
         # q_loss = dirichlet_loss(labels[:, q_start:q_end + 1], predictions[:, q_start:q_end + 1])
 
         q_losses.append(q_loss)

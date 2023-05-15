@@ -60,7 +60,9 @@ class Trainer:
             output_ = []
             kl_ = []
             for mc_run in range(self.config.sample):
-                output, _ = self.model(X)
+                output = self.model(X)
+                # output, _ = self.model(X)
+                output = losses.MultiSoftmax(output, self.schema.question_index_groups)
                 kl = get_kl_loss(self.model)
                 output_.append(output)
                 kl_.append(kl)
@@ -91,7 +93,8 @@ class Trainer:
                 output_ = []
                 kl_ = []
                 for mc_run in range(self.config.sample):
-                    output, _  = self.model(X)
+                    output = self.model(X)
+                    # output, _  = self.model(X)
                     kl = get_kl_loss(self.model)
                     output_.append(output)
                     kl_.append(kl)
@@ -139,7 +142,7 @@ class Trainer:
 def main(config):
     model = efficientnet_v2_s(num_classes=34, dropout=config.dropout_rate)
     dnn_to_bnn(model, const_bnn_prior_parameters)
-    model = Morphics(model)
+    # model = Morphics(model)
     model = model.to("cuda:1")
     subset_size = 10000
     subset_indices = list(range(subset_size))
