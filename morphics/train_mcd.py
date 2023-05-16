@@ -95,13 +95,13 @@ class Trainer:
         os.makedirs(self.config.save_dir + "log/", exist_ok=True)
         writer = SummaryWriter(self.config.save_dir + "log/")
         for epoch in range(self.config.epochs):
-            train_loss, train_kl = self.train_epoch(train_loader, epoch, writer)
-            print(f"epoch: {epoch}, loss: {train_loss}, kl: {train_kl}")
-            eval_loss, eval_kl = self.evaluate(valid_loader, epoch, writer)
-            self.scheduler.step(eval_loss + eval_kl)
-            print(f"valid_loss: {eval_loss}, valid_kl: {eval_kl}")
+            train_loss = self.train_epoch(train_loader, epoch, writer)
+            print(f"epoch: {epoch}, loss: {train_loss}")
+            eval_loss = self.evaluate(valid_loader, epoch, writer)
+            self.scheduler.step(eval_loss)
+            print(f"valid_loss: {eval_loss}")
             self.save_checkpoint(epoch)
-            self.early_stopping(eval_loss + eval_kl, self.model)
+            self.early_stopping(eval_loss, self.model)
             if self.early_stopping.early_stop:
                 print("Early stopping")
                 break
@@ -111,25 +111,25 @@ def main(config):
     model = efficientnet_v2_s(num_classes=34, dropout=config.dropout_rate)
     model = Morphics(model)
     model = model.to("cuda:1")
-    print(model)
-    # subset_size = 10000
-    # subset_indices = list(range(subset_size))
-    #
-    # train_data = GalaxyDataset(annotations_file=config.train_file, transform=config.transfer)
-    # # train_data = Subset(train_data, subset_indices)
-    # train_loader = DataLoader(dataset=train_data, batch_size=config.batch_size,
-    #                           shuffle=True, num_workers=config.WORKERS, pin_memory=True)
-    #
-    # valid_data = GalaxyDataset(annotations_file=config.valid_file,
-    #                            transform=transforms.Compose([transforms.ToTensor()]), )
-    # # valid_data = Subset(valid_data, subset_indices)
-    # valid_loader = DataLoader(dataset=valid_data, batch_size=config.batch_size,
-    #                           shuffle=True, num_workers=config.WORKERS, pin_memory=True)
-    # device_ids = [1]
-    # model = torch.nn.DataParallel(model, device_ids=device_ids)
-    # optimizer = torch.optim.Adam(model.parameters(), lr=config.lr, betas=config.betas)
-    # trainer = Trainer(model=model, optimizer=optimizer, config=config)
-    # trainer.train(train_loader=train_loader, valid_loader=valid_loader)
+    # print(model)
+    subset_size = 10000
+    subset_indices = list(range(subset_size))
+
+    train_data = GalaxyDataset(annotations_file=config.train_file, transform=config.transfer)
+    # train_data = Subset(train_data, subset_indices)
+    train_loader = DataLoader(dataset=train_data, batch_size=config.batch_size,
+                              shuffle=True, num_workers=config.WORKERS, pin_memory=True)
+
+    valid_data = GalaxyDataset(annotations_file=config.valid_file,
+                               transform=transforms.Compose([transforms.ToTensor()]), )
+    # valid_data = Subset(valid_data, subset_indices)
+    valid_loader = DataLoader(dataset=valid_data, batch_size=config.batch_size,
+                              shuffle=True, num_workers=config.WORKERS, pin_memory=True)
+    device_ids = [1]
+    model = torch.nn.DataParallel(model, device_ids=device_ids)
+    optimizer = torch.optim.Adam(model.parameters(), lr=config.lr, betas=config.betas)
+    trainer = Trainer(model=model, optimizer=optimizer, config=config)
+    trainer.train(train_loader=train_loader, valid_loader=valid_loader)
 
 
 if __name__ == "__main__":
