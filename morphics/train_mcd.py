@@ -9,20 +9,9 @@ from training import losses, metrics
 import argparse
 from utils.utils import *
 from torchvision.models import *
-from bayesian_torch.models.dnn_to_bnn import dnn_to_bnn, get_kl_loss
 from models.morphics import Morphics
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from models.utils import *
-
-const_bnn_prior_parameters = {
-    "prior_mu": 0.0,
-    "prior_sigma": 1.0,
-    "posterior_mu_init": 0.0,
-    "posterior_rho_init": -3.0,
-    "type": "Flipout",  # Flipout or Reparameterization
-    "moped_enable": False,  # initialize mu/sigma from the dnn weights
-    "moped_delta": 0.2,
-}
 
 
 def init_rand_seed(rand_seed):
@@ -52,65 +41,44 @@ class Trainer:
 
     def train_epoch(self, train_loader, epoch, writer):
         train_loss = 0
-        train_kl = 0
         self.model.train()
         for i, (X, label) in enumerate(train_loader):
             label = torch.as_tensor(label, dtype=torch.long).to("cuda:1")
             X = X.to("cuda:1")
             output_ = []
-            kl_ = []
             for mc_run in range(self.config.sample):
-                # output = self.model(X)
                 output, _ = self.model(X)
                 # output = losses.MultiSoftmax(output, self.schema.question_index_groups)
-                kl = get_kl_loss(self.model)
                 output_.append(output)
-                kl_.append(kl)
             output = torch.mean(torch.stack(output_), dim=0)
-            kl = torch.mean(torch.stack(kl_), dim=0) / self.config.batch_size
             dirichlet_loss = torch.mean(self.dirichlet_loss_func(output, label), dim=0)
-            loss_value = torch.mean(dirichlet_loss) + kl
+            loss_value = torch.mean(dirichlet_loss)
             self.optimizer.zero_grad()
             loss_value.backward()
             self.optimizer.step()
             train_loss += torch.mean(dirichlet_loss).item()
-            train_kl += kl.item()
         avg_train_loss = train_loss / len(train_loader)
-        avg_train_kl = train_kl / len(train_loader)
         writer.add_scalar('Training loss by steps', avg_train_loss, epoch)
-        writer.add_scalar('Training kl by steps', avg_train_kl, epoch)
-        writer.add_scalar('Training total loss by steps', avg_train_kl + avg_train_loss, epoch)
-        return avg_train_loss, avg_train_kl
+        return avg_train_loss
 
     def evaluate(self, valid_loader, epoch, writer):
         eval_loss = 0
-        eval_kl = 0
         with torch.no_grad():
             self.model.eval()
             for X, label in valid_loader:
                 label = torch.as_tensor(label, dtype=torch.long).to("cuda:1")
                 X = X.to("cuda:1")
                 output_ = []
-                kl_ = []
                 for mc_run in range(self.config.sample):
-                    # output = self.model(X)
                     output, _ = self.model(X)
-                    kl = get_kl_loss(self.model)
                     output_.append(output)
-                    kl_.append(kl)
                 output = torch.mean(torch.stack(output_), dim=0)
-                kl = torch.mean(torch.stack(kl_), dim=0)
                 dirichlet_loss = torch.mean(self.dirichlet_loss_func(output, label), dim=0)
-                scaled_kl = kl / self.config.batch_size
                 eval_loss += torch.mean(dirichlet_loss).item()
-                eval_kl += scaled_kl.item()
 
         avg_eval_loss = eval_loss / len(valid_loader)
-        avg_eval_kl = eval_kl / len(valid_loader)
         writer.add_scalar('Validating loss by steps', avg_eval_loss, epoch)
-        writer.add_scalar('Validating kl by steps', avg_eval_kl, epoch)
-        writer.add_scalar('Validating total loss by steps', avg_eval_kl + avg_eval_loss, epoch)
-        return avg_eval_loss, avg_eval_kl
+        return avg_eval_loss
 
     def save_checkpoint(self, epoch):
         checkpoint = {
@@ -141,27 +109,27 @@ class Trainer:
 
 def main(config):
     model = efficientnet_v2_s(num_classes=34, dropout=config.dropout_rate)
-    dnn_to_bnn(model, const_bnn_prior_parameters)
     model = Morphics(model)
     model = model.to("cuda:1")
-    subset_size = 10000
-    subset_indices = list(range(subset_size))
-
-    train_data = GalaxyDataset(annotations_file=config.train_file, transform=config.transfer)
-    # train_data = Subset(train_data, subset_indices)
-    train_loader = DataLoader(dataset=train_data, batch_size=config.batch_size,
-                              shuffle=True, num_workers=config.WORKERS, pin_memory=True)
-
-    valid_data = GalaxyDataset(annotations_file=config.valid_file,
-                               transform=transforms.Compose([transforms.ToTensor()]), )
-    # valid_data = Subset(valid_data, subset_indices)
-    valid_loader = DataLoader(dataset=valid_data, batch_size=config.batch_size,
-                              shuffle=True, num_workers=config.WORKERS, pin_memory=True)
-    device_ids = [1]
-    model = torch.nn.DataParallel(model, device_ids=device_ids)
-    optimizer = torch.optim.Adam(model.parameters(), lr=config.lr, betas=config.betas)
-    trainer = Trainer(model=model, optimizer=optimizer, config=config)
-    trainer.train(train_loader=train_loader, valid_loader=valid_loader)
+    print(model)
+    # subset_size = 10000
+    # subset_indices = list(range(subset_size))
+    #
+    # train_data = GalaxyDataset(annotations_file=config.train_file, transform=config.transfer)
+    # # train_data = Subset(train_data, subset_indices)
+    # train_loader = DataLoader(dataset=train_data, batch_size=config.batch_size,
+    #                           shuffle=True, num_workers=config.WORKERS, pin_memory=True)
+    #
+    # valid_data = GalaxyDataset(annotations_file=config.valid_file,
+    #                            transform=transforms.Compose([transforms.ToTensor()]), )
+    # # valid_data = Subset(valid_data, subset_indices)
+    # valid_loader = DataLoader(dataset=valid_data, batch_size=config.batch_size,
+    #                           shuffle=True, num_workers=config.WORKERS, pin_memory=True)
+    # device_ids = [1]
+    # model = torch.nn.DataParallel(model, device_ids=device_ids)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=config.lr, betas=config.betas)
+    # trainer = Trainer(model=model, optimizer=optimizer, config=config)
+    # trainer.train(train_loader=train_loader, valid_loader=valid_loader)
 
 
 if __name__ == "__main__":

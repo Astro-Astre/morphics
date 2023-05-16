@@ -138,7 +138,8 @@ def softmax_output(input, question_index_groups):
 
         # 对输入的子数组进行softmax操作
         input_slice = batched_input[:, q_start:q_end]
-        softmax_result = torch.softmax(input_slice, dim=1) * 99 + 1
+        softmax_result = torch.softmax(input_slice, dim=1)
+        # softmax_result = torch.softmax(input_slice, dim=1) * 99 + 1
 
         # 将softmax结果存储在与输入相同形状的数组中
         result[:, q_start:q_end] = softmax_result
