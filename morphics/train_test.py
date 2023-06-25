@@ -107,8 +107,44 @@ class Trainer:
                 break
 
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+class SimpleCNN(nn.Module):
+    def __init__(self):
+        super(SimpleCNN, self).__init__()
+
+        # Define the layers
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, padding=1)  # Input: 3 channels, Output: 16 channels
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1)  # Input: 16 channels, Output: 32 channels
+        self.dropout1 = nn.Dropout2d(p=0.5)  # Dropout after the last convolutional layer
+        self.fc1 = nn.Linear(32 * 64 * 64, 128)  # Assuming the input image size is 32x32
+        self.dropout2 = nn.Dropout(p=0.5)  # Dropout after the first fully connected layer
+        self.fc2 = nn.Linear(128, 34)  # Output: 34 classes
+
+    def forward(self, x):
+        # Forward pass through the first convolutional layer, then ReLU, then max pooling
+        x = F.max_pool2d(F.relu(self.conv1(x)), 2)
+
+        # Forward pass through the second convolutional layer, then ReLU, then max pooling, then dropout
+        x = self.dropout1(F.max_pool2d(F.relu(self.conv2(x)), 2))
+
+        # Flatten the output from the convolutional layers
+        x = x.view(x.size(0), -1)
+
+        # Forward pass through the first fully connected layer, then ReLU, then dropout
+        x = self.dropout2(F.relu(self.fc1(x)))
+
+        # Forward pass through the second fully connected layer
+        x = self.fc2(x)
+
+        return x
+
+
 def main(config):
-    model = resnet18(num_classes=34, dropout=config.dropout_rate)
+    model = SimpleCNN()
     model = Morphics(model)
     model = model.to("cuda:1")
     # print(model)
